@@ -1,0 +1,24 @@
+# Where trawl looks for jobs. Board keys are the company's name in the board's URL,
+# e.g. boards-api.greenhouse.io/v1/boards/<key>/jobs. Add a company by adding its key.
+
+[locations]
+# A posting is kept if its location text contains any of these (case-insensitive).
+# "Remote" is left out on purpose: most remote roles on US boards are US-only.
+include = ["Singapore", "APAC", "Asia Pacific", "Asia-Pacific", "Southeast Asia"]
+
+[greenhouse]
+boards = ["anthropic", "databricks", "scaleai", "gleanwork", "mongodb", "stripe", "datadog",
+          "cloudflare", "elastic", "okta", "twilio", "figma"]
+
+[lever]
+boards = ["palantir", "spotify"]
+
+[ashby]
+boards = ["sierra", "decagon", "openai", "cohere", "harvey", "perplexity", "elevenlabs", "writer",
+          "cognition", "ramp", "notion", "linear", "langchain"]
+
+[mcf]
+# MyCareersFuture (Singapore): search queries rather than companies.
+boards = ["forward deployed engineer", "applied ai engineer", "ai solutions engineer",
+          "solutions engineer", "deployment engineer", "ai engineer", "genai engineer",
+          "customer engineer", "implementation engineer"]

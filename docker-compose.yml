@@ -1,0 +1,27 @@
+services:
+  db:
+    # pgvector from the start: M1 stores description embeddings next to the postings
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: trawl
+      POSTGRES_PASSWORD: trawl
+      POSTGRES_DB: trawl
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trawl"]
+      interval: 5s
+      retries: 10
+
+  trawl:
+    build: .
+    command: ["run"]
+    env_file: [{ path: .env, required: false }]
+    environment:
+      TRAWL_DATABASE_URL: postgresql://trawl:trawl@db:5432/trawl
+    depends_on:
+      db: { condition: service_healthy }
+    profiles: [job]  # not a long-running service: `docker compose run --rm trawl run`
+
+volumes:
+  pgdata:

@@ -1,0 +1,91 @@
+{
+ "jobs": [
+  {
+   "id": "8152eaf6-012b-4154-95e2-7d6c52faba93",
+   "title": "Enterprise Sales Engineer",
+   "department": "Sales",
+   "team": "Sales Engineering",
+   "employmentType": "FullTime",
+   "location": "San Francisco, CA",
+   "secondaryLocations": [
+    {
+     "location": "US - Remote",
+     "address": {
+      "postalAddress": {
+       "addressCountry": "United States",
+       "addressLocality": ""
+      }
+     }
+    },
+    {
+     "location": "New York, NY",
+     "address": {
+      "postalAddress": {
+       "addressRegion": "New York",
+       "addressCountry": "United States",
+       "addressLocality": "New York"
+      }
+     }
+    },
+    {
+     "location": "Atlanta, GA",
+     "address": {
+      "postalAddress": {
+       "addressRegion": "GA",
+       "addressCountry": "United States",
+       "addressLocality": "Atlanta"
+      }
+     }
+    }
+   ],
+   "publishedAt": "2024-01-28T00:45:22.039+00:00",
+   "isListed": true,
+   "isRemote": false,
+   "workplaceType": "OnSite",
+   "address": {
+    "postalAddress": {
+     "addressRegion": "CA",
+     "addressCountry": "United States",
+     "addressLocality": "San Francisco"
+    }
+   },
+   "jobUrl": "https://jobs.ashbyhq.com/Sierra/8152eaf6-012b-4154-95e2-7d6c52faba93",
+   "applyUrl": "https://jobs.ashbyhq.com/Sierra/8152eaf6-012b-4154-95e2-7d6c52faba93/application",
+   "descriptionPlain": "ABOUT US\n\nSierra is the leading platform for customer-facing AI agents, working with many of the world's biggest brands \u2014 including The GAP, Rocket Mortgage, SoFi, Sutter Health, and SoftBank \u2014 to transform how they serve customers and grow their businesses. We are primarily an in-person company bas"
+  },
+  {
+   "id": "8da2071d-5e2f-43da-9bb1-2c7b30c078af",
+   "title": "High Growth Enterprise Account Executive",
+   "department": "Sales",
+   "team": "Sales",
+   "employmentType": "FullTime",
+   "location": "San Francisco, CA",
+   "secondaryLocations": [
+    {
+     "location": "New York, NY",
+     "address": {
+      "postalAddress": {
+       "addressRegion": "New York",
+       "addressCountry": "United States",
+       "addressLocality": "New York"
+      }
+     }
+    }
+   ],
+   "publishedAt": "2026-07-16T04:01:12.707+00:00",
+   "isListed": true,
+   "isRemote": false,
+   "workplaceType": "OnSite",
+   "address": {
+    "postalAddress": {
+     "addressRegion": "CA",
+     "addressCountry": "United States",
+     "addressLocality": "San Francisco"
+    }
+   },
+   "jobUrl": "https://jobs.ashbyhq.com/Sierra/8da2071d-5e2f-43da-9bb1-2c7b30c078af",
+   "applyUrl": "https://jobs.ashbyhq.com/Sierra/8da2071d-5e2f-43da-9bb1-2c7b30c078af/application",
+   "descriptionPlain": "ABOUT US\n\nSierra is the leading platform for customer-facing AI agents, working with many of the world's biggest brands \u2014 including The GAP, Rocket Mortgage, SoFi, Sutter Health, and SoftBank \u2014 to transform how they serve customers and grow their businesses. We are primarily an in-person company bas"
+  }
+ ]
+}

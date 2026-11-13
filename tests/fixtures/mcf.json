@@ -1,0 +1,310 @@
+{
+ "results": [
+  {
+   "score": 1.8532351,
+   "title_match_score": 0.5021045,
+   "skills_match_score": 0,
+   "recency_score": 1.2,
+   "metadata": {
+    "jobPostId": "MCF-2026-2016773",
+    "updatedAt": "2026-11-13T08:43:24",
+    "newPostingDate": "2026-11-13",
+    "totalNumberJobApplication": 0,
+    "isPostedOnBehalf": false,
+    "isHideSalary": false,
+    "isHideHiringEmployerName": false,
+    "jobDetailsUrl": "https://www.mycareersfuture.gov.sg/job/information-technology/ai-engineer-ai-digital-solutions-forward-deployed-engineer-recruit-express-df2f349d68a0e829df9bb61ccc3f95f7"
+   },
+   "address": {
+    "overseasCountry": null,
+    "foreignAddress1": null,
+    "foreignAddress2": null,
+    "block": "391A",
+    "street": "ORCHARD ROAD",
+    "floor": null,
+    "unit": null,
+    "building": "NGEE ANN CITY",
+    "postalCode": "238873",
+    "isOverseas": false,
+    "districts": [
+     {
+      "id": 9,
+      "location": "D09 Cairnhill, Orchard, River Valley",
+      "region": "Central",
+      "sectors": [
+       "22",
+       "23"
+      ],
+      "regionId": "Central"
+     }
+    ],
+    "lat": 1.30242417189413,
+    "lng": 103.834676124723
+   },
+   "hiringCompany": null,
+   "positionLevels": [
+    {
+     "id": 8,
+     "position": "Senior Executive"
+    }
+   ],
+   "schemes": [],
+   "flexibleWorkArrangements": [],
+   "salary": {
+    "minimum": 5000,
+    "maximum": 7500,
+    "type": {
+     "salaryType": "Monthly"
+    }
+   },
+   "postedCompany": {
+    "uen": "199601303W",
+    "name": "RECRUIT EXPRESS PTE LTD",
+    "logoFileName": "264d8aeb5b369c0a7176c2c6a18c8ff4/recruit-express.jpg",
+    "logoUploadPath": "https://static.mycareersfuture.gov.sg/images/company/logos/264d8aeb5b369c0a7176c2c6a18c8ff4/recruit-express.jpg",
+    "responsiveEmployer": {
+     "isResponsive": true
+    }
+   },
+   "skills": [
+    {
+     "skill": "Ai",
+     "uuid": "0a40e3c91a3a55c9a37428c6d194d0e5"
+    },
+    {
+     "skill": "Digital",
+     "uuid": "0bb8309239953b782fec18706fe60b4a"
+    },
+    {
+     "skill": "Data Ingestion",
+     "uuid": "148f8636ea88d4c1b501c3ac7c88e4c0"
+    },
+    {
+     "skill": "Business Support Unit",
+     "uuid": "2552181f745051976e1b19256e8a4efd"
+    },
+    {
+     "skill": "Roadmap",
+     "uuid": "29afbc227d97b08a97ca3c7bc254c409"
+    },
+    {
+     "skill": "Security",
+     "uuid": "2fae32629d4ef4fc6341f1751b405e45"
+    },
+    {
+     "skill": "rollout plan",
+     "uuid": "3460650a3f2bce0c4f23aa4e7a12dc51"
+    },
+    {
+     "skill": "Integration Management",
+     "uuid": "3ae895bab60a0dd9e972f8fae06b813e"
+    },
+    {
+     "skill": "Personnel and Equipment Operational Readiness",
+     "uuid": "8dcb96eb454b85f3732950d3ddabed70"
+    },
+    {
+     "skill": "Achieve Business Objectives",
+     "uuid": "8ff7fff84d2daee9b366761bc4e82c19"
+    },
+    {
+     "skill": "Training",
+     "uuid": "cf270e40d273f9e7fd7c3061729060c3"
+    },
+    {
+     "skill": "Liaising With Architects",
+     "uuid": "d01190c5ed0e26f15a9881c135a93fbf"
+    },
+    {
+     "skill": "Collaboration With Stakeholders",
+     "uuid": "d60c53cbe0278241dc2878ffbe58cedb"
+    },
+    {
+     "skill": "Architecture & Deployment",
+     "uuid": "f7834445533d3edf4d7ec0dbc6c9b6d8"
+    },
+    {
+     "skill": "Testing",
+     "uuid": "fa6a5a3224d7da66d9e0bdec25f62cf0"
+    },
+    {
+     "skill": "Business Requirements",
+     "uuid": "fb7ef3df0fd8ed7b3630bad089942103"
+    }
+   ],
+   "employmentTypes": [
+    {
+     "id": 3,
+     "employmentType": "Contract"
+    }
+   ],
+   "categories": [
+    {
+     "id": 21,
+     "category": "Information Technology"
+    }
+   ],
+   "shiftPattern": null,
+   "uuid": "df2f349d68a0e829df9bb61ccc3f95f7",
+   "title": "AI Engineer | AI & Digital Solutions Forward Deployed Engineer",
+   "status": {
+    "id": "102",
+    "jobStatus": "Open"
+   }
+  },
+  {
+   "score": 2.3191364,
+   "title_match_score": 0.69253105,
+   "job_role_score": 0.16606241,
+   "skills_match_score": 0,
+   "recency_score": 1.0471028,
+   "metadata": {
+    "jobPostId": "MCF-2026-1998363",
+    "updatedAt": "2026-11-11T07:26:53",
+    "newPostingDate": "2026-11-11",
+    "totalNumberJobApplication": 0,
+    "isPostedOnBehalf": false,
+    "isHideSalary": false,
+    "isHideHiringEmployerName": false,
+    "jobDetailsUrl": "https://www.mycareersfuture.gov.sg/job/information-technology/junior-forward-deployed-engineer-softwareone-70fd84e500ea177f94d223dd3de15ccb"
+   },
+   "address": {
+    "overseasCountry": null,
+    "foreignAddress1": null,
+    "foreignAddress2": null,
+    "block": "150",
+    "street": "BEACH ROAD",
+    "floor": null,
+    "unit": null,
+    "building": "GATEWAY WEST",
+    "postalCode": "189720",
+    "isOverseas": false,
+    "districts": [
+     {
+      "id": 7,
+      "location": "D07 Middle Road, Golden Mile",
+      "region": "Central",
+      "sectors": [
+       "18",
+       "19"
+      ],
+      "regionId": "Central"
+     }
+    ],
+    "lat": 1.29835114702682,
+    "lng": 103.858853820405
+   },
+   "hiringCompany": null,
+   "positionLevels": [
+    {
+     "id": 7,
+     "position": "Professional"
+    }
+   ],
+   "schemes": [],
+   "flexibleWorkArrangements": [],
+   "salary": {
+    "minimum": 10000,
+    "maximum": 11000,
+    "type": {
+     "salaryType": "Monthly"
+    }
+   },
+   "postedCompany": {
+    "uen": "200102465D",
+    "name": "SOFTWAREONE PTE. LTD.",
+    "logoFileName": null,
+    "logoUploadPath": null,
+    "responsiveEmployer": {
+     "isResponsive": false
+    }
+   },
+   "skills": [
+    {
+     "skill": "Collaborate With Engineers",
+     "uuid": "15c0089c32f4b9a57247cd0187822118"
+    },
+    {
+     "skill": "Troubleshooting",
+     "uuid": "231cf4c70d866b616c21baddaeed0696"
+    },
+    {
+     "skill": "AI Agents",
+     "uuid": "27f08387b26e1ceeb1b60bd9c97e7a47"
+    },
+    {
+     "skill": "Technical Customer Support",
+     "uuid": "38bcdce0604acc0a8cd577bfc7cf852c"
+    },
+    {
+     "skill": "Hardware",
+     "uuid": "3c02a379965ab0dfcd77b1c484450433"
+    },
+    {
+     "skill": "Data Center",
+     "uuid": "47df2b78ac4b3edfbf1c6d0b2a64c579"
+    },
+    {
+     "skill": "Information Technology",
+     "uuid": "73595e157019f972a82f2fea61332a73"
+    },
+    {
+     "skill": "Monitoring",
+     "uuid": "89948c7f4890af5ff18524b4fc3f3611"
+    },
+    {
+     "skill": "source code maintenance",
+     "uuid": "a760edd8f8a9452fb4d46291d2b69b6a"
+    },
+    {
+     "skill": "Design-Build",
+     "uuid": "a76a3e36596e3e2cb44f29a0e47181fd"
+    },
+    {
+     "skill": "Python",
+     "uuid": "a7f5f35426b927411fc9231b56382173"
+    },
+    {
+     "skill": "Continuous improvement Systems",
+     "uuid": "b22d87ea2f63816959a7c8fabc8e6df3"
+    },
+    {
+     "skill": "Customer Focused Design",
+     "uuid": "bb37949186497bc5791dd1df77a2ff10"
+    },
+    {
+     "skill": "Computer Systems",
+     "uuid": "c07b0c7ac5ada0d2dc92faa6572b7b54"
+    },
+    {
+     "skill": "Deployment",
+     "uuid": "ea355214fd4bc7c57f471bd92918879b"
+    },
+    {
+     "skill": "Linux",
+     "uuid": "edc9f0a5a5d57797bf68e37364743831"
+    }
+   ],
+   "employmentTypes": [
+    {
+     "id": 8,
+     "employmentType": "Full Time"
+    }
+   ],
+   "categories": [
+    {
+     "id": 21,
+     "category": "Information Technology"
+    }
+   ],
+   "shiftPattern": null,
+   "uuid": "70fd84e500ea177f94d223dd3de15ccb",
+   "title": "Junior Forward Deployed Engineer",
+   "status": {
+    "id": "102",
+    "jobStatus": "Open"
+   }
+  }
+ ],
+ "total": 2
+}
