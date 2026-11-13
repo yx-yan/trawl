@@ -20,7 +20,7 @@ with evals, a human approval queue, an audit log, and a Docker deployment.
 | Milestone | What it does | |
 |---|---|---|
 | M0 | Collect from Greenhouse, Lever, Ashby, MyCareersFuture; daily Telegram digest | ✅ |
-| M1 | Judge each job by its description: facts from the model, verdict from rules; evals | ✅ (match scoring next) |
+| M1 | Judge each job by its description (model facts, rule verdicts), score fit against the résumé, weekly skill-gap report; evals | ✅ |
 | M2 | Approval queue (Next.js) and tailored résumé per job | |
 | M3 | Application filler: pre-fill, screenshot, wait for approval, then submit | |
 | M4 | Status tracking from Gmail, funnel dashboard | |
@@ -36,13 +36,17 @@ cp .env.example .env                     # add a Telegram bot token to get the d
 .venv/bin/trawl process                  # verdict per posting: rules, then DeepSeek (DEEPSEEK_API_KEY)
 .venv/bin/trawl digest --dry-run         # print what the digest would send
 .venv/bin/trawl run                      # all three; this is what cron runs
+.venv/bin/trawl gaps                     # skills the jobs ask for that the résumé doesn't show
 ```
 
 Or entirely in Docker: `docker compose run --rm trawl run`.
 
-Which companies and searches to watch lives in [`sources.toml`](sources.toml); who the jobs are for
-(graduation date, experience, work pass) in [`criteria.toml`](criteria.toml). After editing the
-criteria, `trawl process --redecide` re-applies them without new model calls.
+Which companies and searches to watch lives in [`sources.toml`](sources.toml). Who the jobs are for
+(graduation date, experience, work pass) is personal, so it lives outside the repo in
+`~/.trawl/criteria.toml`: copy [`criteria.example.toml`](criteria.example.toml) there and fill it in.
+After editing it, `trawl process --redecide` re-applies it without new model calls. The résumé is
+read from `~/.trawl/resume.tex` (or `TRAWL_RESUME`); `deploy/deploy.sh profile` copies both to the
+server.
 
 ## Tests
 

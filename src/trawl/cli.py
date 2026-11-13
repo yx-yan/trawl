@@ -1,4 +1,5 @@
-"""Command line: `trawl collect`, `trawl process`, `trawl digest`, and `trawl run` (all three, for cron)."""
+"""Command line: `trawl collect`, `trawl process`, `trawl digest`, `trawl run` (all three, for cron),
+and `trawl gaps`."""
 
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ from .config import Settings, Sources, load_dotenv
 from .connectors import CONNECTORS
 from .decide import Criteria
 from .extract import new_client
+from .match import load_resume, resume_path
 from .models import Posting
 from .process import process, redecide
 from .store import Store
@@ -62,6 +64,8 @@ def main(argv: list[str] | None = None) -> None:
                    help="have the model read every posting again (after changing extract.py)")
     d = sub.add_parser("digest", help="send new eligible jobs to Telegram")
     d.add_argument("--dry-run", action="store_true", help="print, and don't mark anything as sent")
+    g = sub.add_parser("gaps", help="skills eligible jobs ask for that the résumé doesn't show")
+    g.add_argument("--send", action="store_true", help="send to Telegram instead of printing")
     sub.add_parser("run", help="collect, process, then digest (what cron runs)")
     args = parser.parse_args(argv)
 
@@ -69,6 +73,9 @@ def main(argv: list[str] | None = None) -> None:
     settings = Settings.from_env()
     store = Store.connect(settings.database_url)
     criteria = Criteria.load(settings.criteria_path)
+    if not settings.criteria_path.is_file():
+        print(f"no criteria at {settings.criteria_path} (TRAWL_CRITERIA): using neutral defaults; "
+              "see criteria.example.toml", file=sys.stderr)
     with httpx.Client(timeout=30, headers={"User-Agent": USER_AGENT}) as http:
         if args.command in ("collect", "run"):
             new = collect(store, Sources.load(settings.sources_path), http)
@@ -78,6 +85,18 @@ def main(argv: list[str] | None = None) -> None:
                 store.forget_job_facts()
             elif getattr(args, "redecide", False):
                 print(f"re-decided {redecide(store, criteria)} postings")
-            print(process(store, criteria, http, new_client()))
+            resume = None
+            try:
+                resume = load_resume(resume_path())
+            except OSError:
+                print(f"no résumé at {resume_path()} (TRAWL_RESUME): jobs judged but not scored",
+                      file=sys.stderr)
+            print(process(store, criteria, http, new_client(), resume))
     if args.command in ("digest", "run"):
         send_digest(store, settings, dry_run=getattr(args, "dry_run", False))
+    if args.command == "gaps":
+        text = digest.render_gaps(store.gap_counts())
+        if args.send and settings.telegram_token and settings.telegram_chat_id:
+            digest.send_telegram(text, settings.telegram_token, settings.telegram_chat_id)
+        else:
+            print(text)

@@ -2,10 +2,10 @@
 # job; these settings decide. After changing them, `trawl process --redecide` re-applies them
 # without new model calls.
 #
-# Current profile: a new graduate in Singapore (M.Sc. ends June 2027) who needs an employer to
-# sponsor a work pass; FDE roles, or roles that can lead to FDE.
+# Copy to ~/.trawl/criteria.toml (or point TRAWL_CRITERIA at it) and fill in your own. It stays
+# out of the repo: it says things about you. Missing keys take the defaults in decide.Criteria.
 
-graduation = "2027-06"        # YYYY-MM; drops graduate/intern roles for other cohorts
+graduation = "2027-06"        # YYYY-MM you graduate; drops graduate/intern roles for other cohorts
 max_years = 2                 # drop jobs requiring more experience than this
 needs_sponsorship = true      # drop citizens/PR-only, no-sponsorship and clearance jobs
 

@@ -6,7 +6,7 @@ from conftest import FakeClient, job_facts
 from trawl.decide import Criteria, decide, prefilter
 from trawl.extract import TOOL, JobFacts, extract, extract_with_retry
 
-C = Criteria()
+C = Criteria(graduation="2027-06", needs_sponsorship=True)  # a 2027 graduate who needs a work pass
 
 
 def verdict(title: str = "Forward Deployed Engineer", facts: dict | None = None, **job: object):
@@ -108,10 +108,10 @@ def test_same_reason_from_board_and_model_counted_once() -> None:
     assert v.reasons.count("needs 4+ years") == 1
 
 
-def test_sponsorship_rules_off_for_someone_who_needs_none() -> None:
-    free = Criteria(needs_sponsorship=False)
-    job = JobFacts.model_validate(job_facts(work_authorization="citizens_pr_only"))
-    assert decide("Software Engineer", {"salary_max": 3000}, job, free).eligible
+def test_neutral_defaults_skip_sponsorship_and_graduation_rules() -> None:
+    job = JobFacts.model_validate(job_facts(work_authorization="citizens_pr_only", graduation_from="2030-01"))
+    assert not decide("Software Engineer", {"salary_max": 3000}, job, C).eligible
+    assert decide("Software Engineer", {"salary_max": 3000}, job, Criteria()).eligible
 
 
 def test_extract_forces_the_tool_and_parses() -> None:

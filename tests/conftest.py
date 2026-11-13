@@ -65,10 +65,12 @@ def store() -> Iterator[object]:
 
 
 class FakeClient:
-    """Stands in for anthropic.Anthropic: answers every request with the given tool input."""
+    """Stands in for anthropic.Anthropic: answers job-fact requests with `answers` in order (the
+    last one repeats) and match requests with `matches` the same way."""
 
-    def __init__(self, *answers: dict) -> None:
+    def __init__(self, *answers: dict, matches: list[dict] | None = None) -> None:
         self.answers = list(answers)
+        self.matches = list(matches or [{"score": 70, "strengths": [], "gaps": [], "angle": "x"}])
         self.requests: list[dict] = []
         self.messages = self
 
@@ -76,7 +78,8 @@ class FakeClient:
         from types import SimpleNamespace
 
         self.requests.append(kwargs)
-        answer = self.answers.pop(0) if len(self.answers) > 1 else self.answers[0]
+        queue = self.matches if kwargs["tools"][0]["name"] == "record_match" else self.answers
+        answer = queue.pop(0) if len(queue) > 1 else queue[0]
         return SimpleNamespace(
             content=[SimpleNamespace(type="tool_use", input=answer)], stop_reason="tool_use",
             usage=SimpleNamespace(input_tokens=1000, output_tokens=80))
