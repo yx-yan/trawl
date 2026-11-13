@@ -1,0 +1,10 @@
+[Unit]
+Description=trawl: weekly report of skills the open jobs ask for
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=USER
+WorkingDirectory=/home/USER/trawl
+ExecStart=/usr/bin/docker compose run --rm trawl gaps --send

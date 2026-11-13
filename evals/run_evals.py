@@ -1,7 +1,7 @@
 """Live eval of job-fact extraction: real postings, facts checked by hand against the text.
 
 Each case in cases.json is a snapshot of a real posting (descriptions change and postings close),
-the facts a careful reader gets from it, and whether the default criteria should let it through.
+the facts a careful reader gets from it, and whether it should get through for CANDIDATE below.
 This calls the model, so it costs money (about 15 calls).
 
     python evals/run_evals.py            # all cases
@@ -21,6 +21,8 @@ from trawl.decide import Criteria, decide
 from trawl.extract import extract_with_retry, new_client
 
 HERE = Path(__file__).parent
+# The expected verdicts in cases.json are for this test candidate
+CANDIDATE = Criteria(graduation="2027-06", needs_sponsorship=True)
 
 
 def check(case: dict, client: object) -> dict:
@@ -32,7 +34,7 @@ def check(case: dict, client: object) -> dict:
         ok = facts[name] in want if isinstance(want, list) else facts[name] == want
         if not ok:
             misses[name] = {"want": want, "got": facts[name]}
-    verdict = decide(case["title"], case["board_facts"], job, Criteria())
+    verdict = decide(case["title"], case["board_facts"], job, CANDIDATE)
     if verdict.eligible != case["eligible"]:
         misses["eligible"] = {"want": case["eligible"], "got": verdict.eligible, "reasons": verdict.reasons}
     return {"company": case["company"], "title": case["title"], "misses": misses, "facts": facts,

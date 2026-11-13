@@ -48,6 +48,11 @@ ALTER TABLE postings
     ADD COLUMN IF NOT EXISTS flags      JSONB NOT NULL DEFAULT '[]',
     ADD COLUMN IF NOT EXISTS decided_at TIMESTAMPTZ,
     DROP COLUMN IF EXISTS title_tier;
+-- M1: how well the résumé (by hash) fits each eligible job
+ALTER TABLE postings
+    ADD COLUMN IF NOT EXISTS match       JSONB,
+    ADD COLUMN IF NOT EXISTS resume_hash TEXT,
+    ADD COLUMN IF NOT EXISTS resurface   BOOLEAN NOT NULL DEFAULT false;
 """
 
 
@@ -67,6 +72,16 @@ class Pending:
 
 
 @dataclass
+class ToMatch:
+    id: int
+    company: str
+    title: str
+    description: str
+    match: dict | None
+    digested: bool
+
+
+@dataclass
 class Row:
     id: int
     source: str
@@ -77,15 +92,22 @@ class Row:
     track: str | None
     posted_at: datetime | None
     flags: list[str] = field(default_factory=list)
+    match: dict | None = None
+
+    @property
+    def score(self) -> int:
+        return (self.match or {}).get("score", -1)
 
 
 @dataclass
 class Batch:
-    """What one digest covers: the jobs to send, and a tally of why the rest were dropped."""
+    """What one digest covers: the jobs to send, jobs sent before that now fit the résumé
+    much better, and a tally of why the rest were dropped."""
 
     rows: list[Row]
     rejected: Counter[str]
     decided_ids: list[int]
+    resurfaced: list[Row] = field(default_factory=list)
 
 
 class Store:
@@ -164,6 +186,36 @@ class Store:
              (job_facts or {}).get("track"), posting_id),
         )
 
+    def to_match(self, resume_hash: str) -> list[ToMatch]:
+        """Eligible postings not yet scored against this version of the résumé."""
+        rows = self.conn.execute(
+            """
+            SELECT id, company, title, description, match, digested_at IS NOT NULL AS digested
+            FROM postings WHERE eligible AND resume_hash IS DISTINCT FROM %s
+            """,
+            (resume_hash,),
+        ).fetchall()
+        return [ToMatch(**r) for r in rows]
+
+    def save_match(self, posting_id: int, match: dict, resume_hash: str, *, resurface: bool) -> None:
+        self.conn.execute(
+            "UPDATE postings SET match = %s, resume_hash = %s, resurface = resurface OR %s WHERE id = %s",
+            (Jsonb(match), resume_hash, resurface, posting_id),
+        )
+
+    def gap_counts(self, days: int = 14) -> list[tuple[str, int, int]]:
+        """(gap, jobs, FDE jobs) across eligible jobs still listed in the last `days` days."""
+        rows = self.conn.execute(
+            """
+            SELECT g.gap, count(*) AS jobs, count(*) FILTER (WHERE p.track = 'fde') AS fde
+            FROM postings p, jsonb_array_elements_text(p.match->'gaps') AS g(gap)
+            WHERE p.eligible AND p.last_seen > now() - make_interval(days => %s)
+            GROUP BY g.gap ORDER BY count(*) FILTER (WHERE p.track = 'fde') * 2 + count(*) DESC, g.gap
+            """,
+            (days,),
+        ).fetchall()
+        return [(r["gap"], r["jobs"], r["fde"]) for r in rows]
+
     def forget_job_facts(self) -> None:
         """Drop every verdict and the model's facts, so all postings are read again (after the
         extraction prompt or schema changes)."""
@@ -180,7 +232,7 @@ class Store:
         rows = self.conn.execute(
             """
             SELECT DISTINCT ON (fingerprint)
-                   id, source, company, title, url, location, track, posted_at, flags
+                   id, source, company, title, url, location, track, posted_at, flags, match
             FROM postings p
             WHERE digested_at IS NULL AND eligible
               AND NOT EXISTS (SELECT 1 FROM postings d
@@ -194,11 +246,18 @@ class Store:
             WHERE digested_at IS NULL AND decided_at IS NOT NULL AND NOT eligible
             """
         ).fetchall()
+        resurfaced = self.conn.execute(
+            """
+            SELECT id, source, company, title, url, location, track, posted_at, flags, match
+            FROM postings WHERE resurface AND eligible AND digested_at IS NOT NULL
+            """
+        ).fetchall()
         tally: Counter[str] = Counter()
         for r in rejected:
             tally[_reason_kind(r["reasons"][0])] += 1
         return Batch(rows=[Row(**r) for r in rows], rejected=tally,
-                     decided_ids=[r["id"] for r in rows] + [r["id"] for r in rejected])
+                     decided_ids=[r["id"] for r in rows] + [r["id"] for r in rejected],
+                     resurfaced=[Row(**r) for r in resurfaced])
 
     def mark_digested(self, batch: Batch) -> None:
         with self.conn.transaction():
@@ -211,6 +270,8 @@ class Store:
                 """,
                 (batch.decided_ids, batch.decided_ids),
             )
+            self.conn.execute("UPDATE postings SET resurface = false WHERE id = ANY(%s)",
+                              ([r.id for r in batch.resurfaced],))
 
 
 def _reason_kind(reason: str) -> str:

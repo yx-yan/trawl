@@ -30,9 +30,12 @@ TECH_TITLE = re.compile(
 
 @dataclass
 class Criteria:
-    graduation: str = "2027-06"  # YYYY-MM the candidate graduates
+    """Neutral defaults; a candidate's own values live in ~/.trawl/criteria.toml, outside the repo
+    (see criteria.example.toml)."""
+
+    graduation: str | None = None  # YYYY-MM the candidate graduates; None skips graduation windows
     max_years: int = 2
-    needs_sponsorship: bool = True
+    needs_sponsorship: bool = False
     ep_min_salary: int = 6000  # SGD/month; MOM, new applications from 1 Jan 2027
     s_pass_min_salary: int = 3600
     allowed_languages: list[str] = field(default_factory=lambda: ["english", "mandarin", "chinese"])
@@ -98,9 +101,9 @@ def decide(title: str, facts: dict, job: JobFacts, c: Criteria) -> Verdict:
                         "clearance_required": "security clearance"}[job.work_authorization])
     if not job.based_in_singapore:
         reasons.append("based outside Singapore")
-    if job.graduation_from and c.graduation < job.graduation_from:
+    if c.graduation and job.graduation_from and c.graduation < job.graduation_from:
         reasons.append(f"for graduates from {job.graduation_from}")
-    if job.graduation_to and c.graduation > job.graduation_to:
+    if c.graduation and job.graduation_to and c.graduation > job.graduation_to:
         reasons.append(f"for graduates up to {job.graduation_to}")
     if job.requires_phd:
         reasons.append("PhD required")

@@ -20,6 +20,11 @@ services:
     env_file: [{ path: .env, required: false }]
     environment:
       TRAWL_DATABASE_URL: postgresql://trawl:trawl@db:5432/trawl
+      TRAWL_RESUME: /data/resume.tex
+      TRAWL_CRITERIA: /data/criteria.toml
+    volumes:
+      # ~/.trawl on the host holds the personal files (deploy/deploy.sh profile); read-only in here
+      - ${HOME}/.trawl:/data:ro
     depends_on:
       db: { condition: service_healthy }
     profiles: [job]  # not a long-running service: `docker compose run --rm trawl run`

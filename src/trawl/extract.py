@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
@@ -118,34 +119,44 @@ def new_client() -> Client:
     )
 
 
-def extract(client: Client, *, company: str, title: str, location: str, description: str,
-            model: str | None = None) -> tuple[JobFacts, Usage]:
-    posting = (f"Company: {company}\nTitle: {title}\nLocation: {location}\n\n"
-               f"{description[:MAX_DESCRIPTION]}")
+def call_tool(client: Client, system: str, tool: dict, content: str, *,
+              max_tokens: int = 800) -> tuple[dict, Usage]:
+    """One forced tool call; returns the tool input the model wrote."""
     start = time.monotonic()
     resp = client.messages.create(
-        model=model or os.environ.get("TRAWL_MODEL", "deepseek-flash"),
-        max_tokens=800,
-        # DeepSeek's thinking mode refuses a forced tool_choice; the task is a lookup anyway
+        model=os.environ.get("TRAWL_MODEL", "deepseek-flash"),
+        max_tokens=max_tokens,
+        # DeepSeek's thinking mode refuses a forced tool_choice; these tasks are lookups anyway
         thinking={"type": "disabled"},
-        system=SYSTEM,
-        tools=[TOOL],
-        tool_choice={"type": "tool", "name": TOOL["name"]},
-        messages=[{"role": "user", "content": f"<posting>\n{posting}\n</posting>"}],
+        system=system,
+        tools=[tool],
+        tool_choice={"type": "tool", "name": tool["name"]},
+        messages=[{"role": "user", "content": content}],
     )
     calls = [b for b in resp.content if b.type == "tool_use"]
     if not calls:
         raise ValueError(f"model returned no tool call (stop_reason={resp.stop_reason})")
-    usage = Usage(resp.usage.input_tokens, resp.usage.output_tokens, time.monotonic() - start)
-    return JobFacts.model_validate(calls[0].input), usage
+    return calls[0].input, Usage(resp.usage.input_tokens, resp.usage.output_tokens, time.monotonic() - start)
 
 
-def extract_with_retry(client: Client, attempts: int = 2, **posting: str) -> tuple[JobFacts, Usage]:
-    """The model now and then returns an empty tool call; asking again usually fixes it."""
+def extract(client: Client, *, company: str, title: str, location: str,
+            description: str) -> tuple[JobFacts, Usage]:
+    posting = (f"Company: {company}\nTitle: {title}\nLocation: {location}\n\n"
+               f"{description[:MAX_DESCRIPTION]}")
+    answer, usage = call_tool(client, SYSTEM, TOOL, f"<posting>\n{posting}\n</posting>")
+    return JobFacts.model_validate(answer), usage
+
+
+def with_retry[T](fn: Callable[[], T], attempts: int = 2) -> T:
+    """The model now and then returns an empty or malformed tool call; asking again usually fixes it."""
     for attempt in range(attempts):
         try:
-            return extract(client, **posting)
+            return fn()
         except ValueError:  # includes pydantic's ValidationError
             if attempt == attempts - 1:
                 raise
     raise AssertionError("unreachable")
+
+
+def extract_with_retry(client: Client, **posting: str) -> tuple[JobFacts, Usage]:
+    return with_retry(lambda: extract(client, **posting))

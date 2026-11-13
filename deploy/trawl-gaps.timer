@@ -1,0 +1,9 @@
+[Unit]
+Description=Send the skill-gap report every Monday
+
+[Timer]
+OnCalendar=Mon *-*-* 09:15:00 Asia/Singapore
+Persistent=true
+
+[Install]
+WantedBy=timers.target

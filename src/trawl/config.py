@@ -9,14 +9,14 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 REPO_SOURCES = REPO / "sources.toml"
-REPO_CRITERIA = REPO / "criteria.toml"
+HOME_CRITERIA = Path.home() / ".trawl" / "criteria.toml"  # personal, never in the repo
 
 
 @dataclass
 class Settings:
     database_url: str = "postgresql://trawl:trawl@localhost:5432/trawl"
     sources_path: Path = REPO_SOURCES
-    criteria_path: Path = REPO_CRITERIA
+    criteria_path: Path = HOME_CRITERIA
     telegram_token: str | None = None
     telegram_chat_id: str | None = None
 
@@ -25,7 +25,7 @@ class Settings:
         return cls(
             database_url=os.environ.get("TRAWL_DATABASE_URL", cls.database_url),
             sources_path=Path(os.environ.get("TRAWL_SOURCES", REPO_SOURCES)),
-            criteria_path=Path(os.environ.get("TRAWL_CRITERIA", REPO_CRITERIA)),
+            criteria_path=Path(os.environ.get("TRAWL_CRITERIA", HOME_CRITERIA)),
             telegram_token=os.environ.get("TRAWL_TELEGRAM_TOKEN"),
             telegram_chat_id=os.environ.get("TRAWL_TELEGRAM_CHAT_ID"),
         )
