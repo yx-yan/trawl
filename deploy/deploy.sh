@@ -30,8 +30,8 @@ deploy)
 profile)
     repo="${TRAWL_RESUME_REPO:-$(dirname "$0")/../../resume}"
     git -C "$repo" fetch -q origin
-    git -C "$repo" show origin/main:resume-en.tex | ssh "$host" 'mkdir -p ~/.trawl && cat > ~/.trawl/resume.tex'
-    ssh "$host" 'cat > ~/.trawl/criteria.toml' < ~/.trawl/criteria.toml
+    git -C "$repo" show origin/main:resume-en.tex | ssh "$host" 'umask 077 && mkdir -p ~/.trawl && cat > ~/.trawl/resume.tex'
+    ssh "$host" 'umask 077 && cat > ~/.trawl/criteria.toml' < ~/.trawl/criteria.toml
     echo "copied criteria.toml and resume-en.tex from origin/main ($(git -C "$repo" rev-parse --short origin/main))"
     ;;
 run)
