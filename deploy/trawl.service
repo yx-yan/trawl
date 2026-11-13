@@ -1,0 +1,10 @@
+[Unit]
+Description=trawl: collect jobs and send the daily digest
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=USER
+WorkingDirectory=/home/USER/trawl
+ExecStart=/usr/bin/docker compose run --rm --build trawl run

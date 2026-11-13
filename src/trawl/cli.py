@@ -41,12 +41,12 @@ def send_digest(store: Store, settings: Settings, *, dry_run: bool) -> None:
     if dry_run or not (settings.telegram_token and settings.telegram_chat_id):
         print(text)
         if not dry_run:
-            print("(TRAWL_TELEGRAM_TOKEN / TRAWL_TELEGRAM_CHAT_ID not set: printed instead of sent)",
+            # Only what was really sent is marked, so these stay for the first real digest
+            print("(TRAWL_TELEGRAM_TOKEN / TRAWL_TELEGRAM_CHAT_ID not set: printed, nothing marked as sent)",
                   file=sys.stderr)
-    else:
-        digest.send_telegram(text, settings.telegram_token, settings.telegram_chat_id)
-    if not dry_run:
-        store.mark_digested(rows)
+        return
+    digest.send_telegram(text, settings.telegram_token, settings.telegram_chat_id)
+    store.mark_digested(rows)
 
 
 def main(argv: list[str] | None = None) -> None:

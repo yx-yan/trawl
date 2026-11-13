@@ -2,6 +2,7 @@ services:
   db:
     # pgvector from the start: M1 stores description embeddings next to the postings
     image: pgvector/pgvector:pg17
+    restart: unless-stopped
     environment:
       POSTGRES_USER: trawl
       POSTGRES_PASSWORD: trawl
