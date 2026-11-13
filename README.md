@@ -1,4 +1,8 @@
-# trawl
+<p align="center">
+  <img src="assets/logo.svg" width="128" alt="trawl logo: a cast net spinning open, with the brand fish at its centre">
+</p>
+
+<h1 align="center">trawl</h1>
 
 **Cast wide, keep what fits.** trawl collects forward-deployed-engineer (FDE) jobs from
 public job boards, works out which ones really are FDE work whatever they're called, tailors
