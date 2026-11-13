@@ -3,9 +3,9 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from trawl.config import Sources
 from trawl.connectors import CONNECTORS, ashby, greenhouse, lever, mcf
 from trawl.models import Posting
-from trawl.titles import in_locations, title_tier
 
 
 def test_greenhouse(board_http: httpx.Client) -> None:
@@ -47,32 +47,20 @@ def test_every_connector_registered() -> None:
     assert set(CONNECTORS) == {"greenhouse", "lever", "ashby", "mcf"}
 
 
-@pytest.mark.parametrize(("title", "tier"), [
-    ("Forward Deployed Engineer", "core"),
-    ("Forward-Deployed Software Engineer, APAC", "core"),
-    ("AI Engineer | AI & Digital Solutions Forward Deployed Engineer", "core"),
-    ("Applied AI Architect, Commercial", "core"),
-    ("Agent Engineer", "core"),
-    ("Deployment Strategist", "core"),
-    ("Solutions Architect, GenAI", "core"),
-    ("Enterprise Sales Engineer", "adjacent"),
-    ("Customer Engineer, Google Cloud", "adjacent"),
-    ("Solutions Engineer", "adjacent"),
-    ("GenAI Engineer", "adjacent"),
-    ("3P Revenue Accounting & Reporting", None),
-    ("Administrative Business Partner", None),
-    ("Sr Product Manager, Technical, AWS Forward Deployed Engineering (FDE)", None),
-    ("Head of ASEAN, Applied AI", None),
-])
-def test_title_tier(title: str, tier: str | None) -> None:
-    assert title_tier(title) == tier
+def test_mcf_facts(board_http: httpx.Client) -> None:
+    job = mcf.fetch(board_http, "x")[0]
+    assert job.facts["employment_types"] == ["Contract"]
+    assert job.facts["salary_max"] == 7500
+    description, facts = mcf.describe(board_http, job.external_id)
+    assert "Responsibilities" in description
+    assert facts == {"min_years": 5, "ssic": "78104"}
 
 
-def test_in_locations() -> None:
-    wanted = ["Singapore", "APAC"]
-    assert in_locations("Singapore, Singapore", wanted)
-    assert in_locations("Remote | APAC", wanted)
-    assert not in_locations("San Francisco, CA | Seattle, WA", wanted)
+def test_sources_wants() -> None:
+    sources = Sources(locations=["Singapore"])
+    assert sources.wants("Singapore, Singapore")
+    assert sources.wants("Hybrid | Singapore | Sydney, Australia")
+    assert not sources.wants("San Francisco, CA | Seattle, WA")
 
 
 def test_fingerprint_matches_across_boards() -> None:

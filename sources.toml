@@ -3,8 +3,8 @@
 
 [locations]
 # A posting is kept if its location text contains any of these (case-insensitive).
-# "Remote" is left out on purpose: most remote roles on US boards are US-only.
-include = ["Singapore", "APAC", "Asia Pacific", "Asia-Pacific", "Southeast Asia"]
+# Singapore only: "APAC" and "Remote" roles are usually based elsewhere.
+include = ["Singapore"]
 
 [greenhouse]
 boards = ["anthropic", "databricks", "scaleai", "gleanwork", "mongodb", "stripe", "datadog",
@@ -19,6 +19,9 @@ boards = ["sierra", "decagon", "openai", "cohere", "harvey", "perplexity", "elev
 
 [mcf]
 # MyCareersFuture (Singapore): search queries rather than companies.
+# FDE titles first, then the junior roles that can lead to it.
 boards = ["forward deployed engineer", "applied ai engineer", "ai solutions engineer",
           "solutions engineer", "deployment engineer", "ai engineer", "genai engineer",
-          "customer engineer", "implementation engineer"]
+          "customer engineer", "implementation engineer", "integration engineer",
+          "graduate software engineer", "junior software engineer", "software engineer intern",
+          "ai engineer intern", "machine learning engineer", "graduate programme technology"]

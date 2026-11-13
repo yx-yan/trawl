@@ -1,26 +1,30 @@
-"""The daily digest: new title-matched jobs as one plain-text message, sent to Telegram."""
+"""The daily digest: new eligible jobs as one plain-text message, sent to Telegram."""
 
 from __future__ import annotations
 
 import httpx
 
-from .store import Row
+from .store import Batch
 
 TELEGRAM_LIMIT = 4096
-HEADINGS = {"core": "FDE-like titles", "adjacent": "Adjacent titles"}
+HEADINGS = {"fde": "FDE roles", "path": "Paths into FDE"}
 
 
-def render(rows: list[Row]) -> str:
-    if not rows:
-        return "trawl: no new matching jobs today."
-    lines = [f"trawl: {len(rows)} new matching job{'s' if len(rows) != 1 else ''}"]
-    for tier, heading in HEADINGS.items():
-        group = sorted((r for r in rows if r.title_tier == tier), key=lambda r: (r.company.lower(), r.title))
+def render(batch: Batch) -> str:
+    rows = batch.rows
+    lines = [f"trawl: {len(rows)} new job{'s' if len(rows) != 1 else ''} you can apply to"
+             if rows else "trawl: no new jobs you can apply to today."]
+    for track, heading in HEADINGS.items():
+        group = sorted((r for r in rows if r.track == track), key=lambda r: (r.company.lower(), r.title))
         if not group:
             continue
         lines += ["", f"{heading} ({len(group)})"]
         for r in group:
-            lines.append(f"• {r.company}: {r.title} ({r.location})\n  {r.url}")
+            tags = f" [{'; '.join(r.flags)}]" if r.flags else ""
+            lines.append(f"• {r.company}: {r.title}{tags}\n  {r.url}")
+    if batch.rejected:
+        top = ", ".join(f"{n} {kind}" for kind, n in batch.rejected.most_common(5))
+        lines += ["", f"Filtered out {sum(batch.rejected.values())}: {top}"]
     return "\n".join(lines)
 
 

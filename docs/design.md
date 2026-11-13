@@ -20,9 +20,8 @@ board name must not stop the daily run.
 
 ## 3. Keep every posting in a wanted location, not only title matches
 
-The same work hides under many titles ([roles.md](roles.md)). Titles decide what the M0
-digest shows, but every posting in a wanted location is stored, so M1's classifier can read
-the descriptions of jobs whose titles didn't match.
+The same work hides under many titles ([roles.md](roles.md)), so every posting in Singapore
+is stored and judged by its description, not by whether its title looks right.
 
 ## 4. Same job, several boards
 
@@ -37,3 +36,49 @@ Planned for M3, decided now: trawl may pre-fill an application, but submitting w
 person to approve that exact application, and every step is written to an audit log.
 Sensitive answers (phone number, visa status) come from an encrypted store and are never put
 in a model prompt.
+
+## 6. The model reports facts; rules decide
+
+Whether a job suits me depends on things that change (my graduation date, how much experience
+counts as too much, whether I need a work pass), while what a posting says doesn't. So the model
+never answers "should I apply?". It fills in `JobFacts` (`src/trawl/extract.py`): track, seniority,
+minimum years, employment type, agency, work-authorization terms, graduation window, location,
+PhD, required languages, whether it writes code. Plain rules in `src/trawl/decide.py` turn those
+facts and [`criteria.toml`](../criteria.toml) into a verdict with reasons.
+
+This buys three things. Every rejection has a reason I can read ("needs 5+ years", "citizens /
+PR only"), and the digest tallies them. Changing my criteria is `trawl process --redecide`, with no
+model calls. And the facts are about the job, not me, so the same extraction would serve a second
+candidate unchanged.
+
+Two lessons from real postings shaped the schema:
+
+- **Preference is not a requirement.** "Particularly interested in applicants with a current right
+  to work in Singapore" first came back as citizens-only and dropped Palantir's new-grad role.
+  `prefers_local` is now its own value: a flag in the digest, never a reason to reject.
+- **Graduation windows are dates, not prose.** "Summer 2027 intern, graduating Dec 2027 - Jun 2028"
+  was first kept as text, which no rule could check. The model now returns `graduation_from` /
+  `graduation_to` as YYYY-MM, with a stated mapping for vague dates ("late 2027" -> 2027-09), and
+  a validator turns the string "null" the model sometimes writes into a real null.
+
+## 7. Cheapest checks first
+
+Most postings are rejected without a model call: a senior title, a contract, an agency (SSIC
+78xxx on MyCareersFuture), pay below the S Pass minimum, too many required years. MyCareersFuture's
+search results have no description, so its detail is fetched only for postings that survive the
+first rules, and the rules run again with the agency code and years it adds. On the first real
+run, 696 of about 900 postings stopped at the rules; the model read 203.
+
+Pay matters only as a visa fact: a full-time job paying under the S Pass minimum can't sponsor a
+pass. Internships are exempt, since students intern on their Student's Pass.
+
+DeepSeek's thinking mode refuses a forced `tool_choice`, so extraction runs with thinking off; it
+is a lookup, not a reasoning task. A posting whose call fails keeps no verdict and is retried on
+the next run.
+
+## 8. Evals: hand-checked facts from real postings
+
+`evals/cases.json` holds snapshots of real postings (they change and close), each with the facts I
+checked by reading it and whether it should get through. `python evals/run_evals.py` runs them
+against the live model; it caught the two lessons in section 6 and a "late 2027" that came back
+once as 2027-01. Offline tests use a fake client and cover the rules exhaustively.

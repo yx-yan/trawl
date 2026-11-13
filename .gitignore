@@ -10,3 +10,4 @@ node_modules/
 # Personal data never leaves the machine
 .env
 .trawl/
+evals/results/

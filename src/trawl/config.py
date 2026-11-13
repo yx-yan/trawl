@@ -7,13 +7,16 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-REPO_SOURCES = Path(__file__).resolve().parents[2] / "sources.toml"
+REPO = Path(__file__).resolve().parents[2]
+REPO_SOURCES = REPO / "sources.toml"
+REPO_CRITERIA = REPO / "criteria.toml"
 
 
 @dataclass
 class Settings:
     database_url: str = "postgresql://trawl:trawl@localhost:5432/trawl"
     sources_path: Path = REPO_SOURCES
+    criteria_path: Path = REPO_CRITERIA
     telegram_token: str | None = None
     telegram_chat_id: str | None = None
 
@@ -22,6 +25,7 @@ class Settings:
         return cls(
             database_url=os.environ.get("TRAWL_DATABASE_URL", cls.database_url),
             sources_path=Path(os.environ.get("TRAWL_SOURCES", REPO_SOURCES)),
+            criteria_path=Path(os.environ.get("TRAWL_CRITERIA", REPO_CRITERIA)),
             telegram_token=os.environ.get("TRAWL_TELEGRAM_TOKEN"),
             telegram_chat_id=os.environ.get("TRAWL_TELEGRAM_CHAT_ID"),
         )
@@ -38,6 +42,10 @@ class Sources:
         boards = {name: section["boards"] for name, section in data.items()
                   if isinstance(section, dict) and "boards" in section}
         return cls(locations=data["locations"]["include"], boards=boards)
+
+    def wants(self, location: str) -> bool:
+        loc = location.lower()
+        return any(w.lower() in loc for w in self.locations)
 
 
 def load_dotenv(path: Path = Path(".env")) -> None:
