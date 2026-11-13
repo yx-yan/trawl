@@ -66,6 +66,10 @@ def test_digest_dedupes_across_boards_and_runs(store) -> None:
     assert [(r.source, r.title) for r in rows] == [("greenhouse", "Applied AI Engineer")]
     store.mark_digested(rows)
     assert store.undigested() == []
+    # committed, not just visible to this connection (a SELECT before the UPDATE once left it uncommitted)
+    fresh = store.reconnect()
+    assert fresh.undigested() == []
+    fresh.conn.close()
     # the same job reappearing on yet another board is not sent again
     store.upsert([posting("ashby", "z", "Anthropic", "Applied AI Engineer")])
     assert store.undigested() == []

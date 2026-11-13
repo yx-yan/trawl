@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 from collections.abc import Iterator
@@ -45,15 +46,17 @@ def store() -> Iterator[object]:
     if not url:
         pytest.skip("TRAWL_TEST_DATABASE_URL not set")
     import psycopg
-    from psycopg.rows import dict_row
 
-    from trawl.store import SCHEMA, Store
+    from trawl.store import Store
 
-    conn = psycopg.connect(url, row_factory=dict_row, autocommit=True)
     schema = f"test_{os.getpid()}"
-    conn.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE; CREATE SCHEMA {schema}")
-    conn.execute(f"SET search_path TO {schema}")
-    conn.execute(SCHEMA)
-    yield Store(conn)
-    conn.execute(f"DROP SCHEMA {schema} CASCADE")
-    conn.close()
+    with psycopg.connect(url, autocommit=True) as admin:
+        admin.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
+        admin.execute(f"CREATE SCHEMA {schema}")
+    connect = functools.partial(Store.connect, url, options=f"-c search_path={schema}")
+    store = connect()
+    store.reconnect = connect  # a second, independent connection, to check what was committed
+    yield store
+    store.conn.close()
+    with psycopg.connect(url, autocommit=True) as admin:
+        admin.execute(f"DROP SCHEMA {schema} CASCADE")

@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
@@ -55,10 +56,11 @@ class Store:
         self.conn = conn
 
     @classmethod
-    def connect(cls, url: str) -> Store:
-        conn = psycopg.connect(url, row_factory=dict_row)
+    def connect(cls, url: str, **kwargs: Any) -> Store:
+        # autocommit: each `with conn.transaction()` is then a real transaction. Without it, a
+        # SELECT leaves a transaction open, the block becomes a savepoint, and nothing commits.
+        conn = psycopg.connect(url, row_factory=dict_row, autocommit=True, **kwargs)
         conn.execute(SCHEMA)
-        conn.commit()
         return cls(conn)
 
     def upsert(self, postings: Iterable[Posting]) -> int:
