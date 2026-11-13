@@ -20,7 +20,7 @@ with evals, a human approval queue, an audit log, and a Docker deployment.
 | Milestone | What it does | |
 |---|---|---|
 | M0 | Collect from Greenhouse, Lever, Ashby, MyCareersFuture; daily Telegram digest | ✅ |
-| M1 | LLM extraction, FDE classification by description, match scoring, evals | |
+| M1 | Judge each job by its description: facts from the model, verdict from rules; evals | ✅ (match scoring next) |
 | M2 | Approval queue (Next.js) and tailored résumé per job | |
 | M3 | Application filler: pre-fill, screenshot, wait for approval, then submit | |
 | M4 | Status tracking from Gmail, funnel dashboard | |
@@ -33,14 +33,16 @@ docker compose up -d db                  # Postgres (with pgvector)
 python -m venv .venv && .venv/bin/pip install -e ".[dev]"
 cp .env.example .env                     # add a Telegram bot token to get the digest on your phone
 .venv/bin/trawl collect                  # fetch every board in sources.toml
+.venv/bin/trawl process                  # verdict per posting: rules, then DeepSeek (DEEPSEEK_API_KEY)
 .venv/bin/trawl digest --dry-run         # print what the digest would send
-.venv/bin/trawl run                      # collect + send; this is what cron runs
+.venv/bin/trawl run                      # all three; this is what cron runs
 ```
 
 Or entirely in Docker: `docker compose run --rm trawl run`.
 
-Which companies and searches to watch lives in [`sources.toml`](sources.toml); the role names
-counted as FDE-like are in [`docs/roles.md`](docs/roles.md).
+Which companies and searches to watch lives in [`sources.toml`](sources.toml); who the jobs are for
+(graduation date, experience, work pass) in [`criteria.toml`](criteria.toml). After editing the
+criteria, `trawl process --redecide` re-applies them without new model calls.
 
 ## Tests
 
@@ -48,6 +50,7 @@ counted as FDE-like are in [`docs/roles.md`](docs/roles.md).
 .venv/bin/pytest                                        # offline: recorded board responses
 TRAWL_TEST_DATABASE_URL=postgresql://trawl:trawl@localhost:5432/trawl .venv/bin/pytest   # + Postgres
 .venv/bin/ruff check .
+.venv/bin/python evals/run_evals.py                     # live model on hand-checked postings (costs money)
 ```
 
 ## Design

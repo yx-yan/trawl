@@ -1,0 +1,34 @@
+{
+ "uuid": "df2f349d68a0e829df9bb61ccc3f95f7",
+ "title": "AI Engineer | AI & Digital Solutions Forward Deployed Engineer",
+ "description": "<h2><strong>Job Responsibilities:</strong></h2><p><strong>Business Engagement & Solution Discovery</strong></p><ul><li><p>Partner with business stakeholders to identify operational challenges and transformation opportunities.</p></li><li><p>Define business requirements, success metrics, and deployment roadmaps.</p></li><li><p>Translate business objectives into actionable product and technical requirements.</p></li><li><p>Advisor to business units on AI, digital, data, and automation opportunities.</p></li></ul><h2>AI Solutions Leadership</h2><ul><li><p>Lead end-to-end deployment of digital products, AI solutions, and enterprise applications.</p></li><li><p>Drive pilot implementations and scale successful initiatives across multiple business units.</p></li><li><p>Coordinate cross-functional",
+ "minimumYearsExperience": 5,
+ "employmentTypes": [
+  {
+   "id": 3,
+   "employmentType": "Contract"
+  }
+ ],
+ "positionLevels": [
+  {
+   "id": 8,
+   "position": "Senior Executive"
+  }
+ ],
+ "salary": {
+  "maximum": 7500,
+  "minimum": 5000,
+  "type": {
+   "id": 4,
+   "salaryType": "Monthly"
+  }
+ },
+ "postedCompany": {
+  "uen": "199601303W",
+  "name": "RECRUIT EXPRESS PTE LTD",
+  "ssicCode": "78104",
+  "ssicCode2020": "78104",
+  "ssicDescription2020": "EMPLOYMENT AGENCIES (EXCEPT DOMESTIC WORKER EMPLOYMENT PLACEMENT AGENCIES)"
+ },
+ "hiringCompany": null
+}

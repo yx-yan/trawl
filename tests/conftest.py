@@ -33,6 +33,8 @@ def board_http() -> httpx.Client:
         if host == "api.ashbyhq.com":
             return httpx.Response(200, json=fixture("ashby"))
         if host == "api.mycareersfuture.gov.sg":
+            if request.url.path.startswith("/v2/jobs/"):
+                return httpx.Response(200, json=fixture("mcf_detail"))
             return httpx.Response(200, json=fixture("mcf"))
         return httpx.Response(404)
 
@@ -60,3 +62,29 @@ def store() -> Iterator[object]:
     store.conn.close()
     with psycopg.connect(url, autocommit=True) as admin:
         admin.execute(f"DROP SCHEMA {schema} CASCADE")
+
+
+class FakeClient:
+    """Stands in for anthropic.Anthropic: answers every request with the given tool input."""
+
+    def __init__(self, *answers: dict) -> None:
+        self.answers = list(answers)
+        self.requests: list[dict] = []
+        self.messages = self
+
+    def create(self, **kwargs: object) -> object:
+        from types import SimpleNamespace
+
+        self.requests.append(kwargs)
+        answer = self.answers.pop(0) if len(self.answers) > 1 else self.answers[0]
+        return SimpleNamespace(
+            content=[SimpleNamespace(type="tool_use", input=answer)], stop_reason="tool_use",
+            usage=SimpleNamespace(input_tokens=1000, output_tokens=80))
+
+
+def job_facts(**overrides: object) -> dict:
+    """Facts for an eligible new-grad FDE job; override what a test is about."""
+    return {"track": "fde", "seniority": "entry", "min_years": None, "employment": "permanent",
+            "agency": False, "work_authorization": "unspecified", "based_in_singapore": True,
+            "graduation_from": None, "graduation_to": None, "requires_phd": False,
+            "required_languages": [], "writes_code": True, "intake": None, "reason": "FDE role"} | overrides

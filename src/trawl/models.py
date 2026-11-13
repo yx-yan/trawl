@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 # Legal suffixes and noise that differ between boards for the same employer,
@@ -32,6 +32,9 @@ class Posting:
     location: str
     posted_at: datetime | None
     description: str = ""  # plain text; empty when the board's list endpoint doesn't include it
+    # Structured fields some boards give for free (MyCareersFuture: salary, employment type, level),
+    # used by the rules before any model call. Keys are listed in decide.py.
+    facts: dict = field(default_factory=dict, compare=False)
 
     @property
     def fingerprint(self) -> str:

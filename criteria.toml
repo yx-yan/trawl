@@ -1,0 +1,22 @@
+# Who the jobs are for, as rules (src/trawl/decide.py). The model only reports facts about each
+# job; these settings decide. After changing them, `trawl process --redecide` re-applies them
+# without new model calls.
+#
+# Current profile: a new graduate in Singapore (M.Sc. ends June 2027) who needs an employer to
+# sponsor a work pass; FDE roles, or roles that can lead to FDE.
+
+graduation = "2027-06"        # YYYY-MM; drops graduate/intern roles for other cohorts
+max_years = 2                 # drop jobs requiring more experience than this
+needs_sponsorship = true      # drop citizens/PR-only, no-sponsorship and clearance jobs
+
+# Monthly SGD minimums for a new work pass from 1 Jan 2027 (MOM factsheet, 3 Mar 2026).
+# A full-time job paying under the S Pass minimum can't sponsor; between the two is S Pass only.
+# Internships are exempt: students intern on their Student's Pass.
+ep_min_salary = 6000
+s_pass_min_salary = 3600
+
+allowed_languages = ["english", "mandarin", "chinese"]
+excluded_employment = ["contract", "temporary", "freelance", "part time", "flexi work"]
+excluded_levels = ["manager", "middle management", "senior management"]
+exclude_agencies = true
+excluded_ssic_prefixes = ["78"]   # SSIC 78xxx: employment agencies and labour contractors

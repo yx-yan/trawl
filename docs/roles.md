@@ -2,9 +2,9 @@
 
 "Forward deployed engineer" is the clearest name for the job, but the same work (building and
 deploying software inside a customer's environment, close to the customer, usually with LLMs
-now) is posted under many titles. This list seeds the title matcher in
-[`src/trawl/titles.py`](../src/trawl/titles.py). From M1 on, roles are classified by their
-description instead, so a title missing here is not a job missed.
+now) is posted under many titles. This list guided the search queries in
+[`sources.toml`](../sources.toml); jobs are judged by their description
+([`src/trawl/extract.py`](../src/trawl/extract.py)), so a title missing here is not a job missed.
 
 ## Core: usually FDE work
 
