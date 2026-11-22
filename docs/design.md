@@ -133,3 +133,31 @@ after the digest with what was changed and why. `trawl tailor <id>` does the sam
   new résumé means new tailored versions for jobs not yet sent. PDFs live in Postgres, so the
   container needs no writable volume. The master résumé is never written: Solfish stays its only
   writer.
+
+## 11. Form answers: the model says what a question asks for, code answers it
+
+For jobs on Greenhouse and Ashby, trawl reads the application form and drafts every answer; the
+draft goes to Telegram after the tailored résumé, grouped as needs you / drafted / filled / skipped.
+Greenhouse publishes its forms (`?questions=true`). Ashby doesn't document an endpoint, but its job
+page reads the form from a public GraphQL endpoint and trawl reads it the same way; if that
+changes, the form is skipped and the résumé still goes out. MyCareersFuture applies through the
+candidate's own signed-in profile, so there is no form to draft.
+
+- **The model never sees personal answers.** It reads the questions, the résumé without contact
+  details, and the posting, and for each question returns a kind: a profile field (by name only),
+  an open question (with a draft), a consent, or skip. Code fills profile fields from
+  `~/.trawl/profile.enc`. Text values (phone, email) aren't stored with the draft, only the field
+  that fills them; for choices, code picks the option: "2027-06" matches "May - July 2027", "Q3"
+  and "Summer" by month, a yes/no by the profile's boolean.
+- **The profile is encrypted, with its key kept apart.** Fernet, key in the trawl checkout's `.env`,
+  file in `~/.trawl`; `trawl profile edit` decrypts into a private temporary file for the editor.
+  `trawl profile show` lists which fields are set, never their values.
+- **Consents are never given by trawl.** "I confirm the information is true", privacy notices and
+  "we record interviews with an AI notetaker" wait for the person, whatever the model says: a
+  pattern on the label overrides it.
+- **Demographic questions come only from the profile**, or the "decline" option.
+- **Drafts are checked like bullets.** A number or name in neither the résumé nor the posting is
+  flagged on the draft (the draft can't be put back the way a bullet can). Acronyms of names in
+  the source count as known: "FYP" for "Final Year Project".
+- **Nothing here submits.** Every "needs you" must be answered before M3 can submit, and M3
+  submits only after the person approves that exact form.

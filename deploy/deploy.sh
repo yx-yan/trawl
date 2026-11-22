@@ -9,7 +9,7 @@
 # Personal files stay out of this public repo. `profile` copies ~/.trawl/criteria.toml, and from
 # the private résumé repo's origin/main (merged = approved; local drafts never leave the Mac):
 # resume-en.tex, bank.toml if there is one, and the class and fonts that compile tailored
-# résumés. TRAWL_RESUME_REPO points at that clone (default: ../resume). With TRAWL_DEPLOY_HOST=local
+# résumés. It also copies ~/.trawl/profile.enc, and its key from .env into the server's .env. TRAWL_RESUME_REPO points at that clone (default: ../resume). With TRAWL_DEPLOY_HOST=local
 # it fills this Mac's ~/.trawl the same way.
 set -euo pipefail
 host="${TRAWL_DEPLOY_HOST:?set TRAWL_DEPLOY_HOST=user@host (or local, for profile)}"
@@ -43,6 +43,16 @@ profile)
         | on 'rm -rf ~/.trawl/resume-class && mkdir -p ~/.trawl/resume-class && tar -x -C ~/.trawl/resume-class'
     [ "$host" = local ] || ssh "$host" 'umask 077 && cat > ~/.trawl/criteria.toml' < ~/.trawl/criteria.toml
     echo "copied résumé, bank, class and criteria from origin/main ($(git -C "$repo" rev-parse --short origin/main))"
+    # The encrypted profile goes to ~/.trawl, its key to the server's .env: never side by side
+    if [ "$host" != local ] && [ -f ~/.trawl/profile.enc ]; then
+        ssh "$host" 'umask 077 && cat > ~/.trawl/profile.enc' < ~/.trawl/profile.enc
+        key=$(grep -E '^TRAWL_PROFILE_KEY=' "$(dirname "$0")/../.env" || true)
+        if [ -n "$key" ]; then
+            echo "$key" | ssh "$host" 'cd ~/trawl && umask 077 && touch .env &&
+                grep -v "^TRAWL_PROFILE_KEY=" .env > .env.new; cat >> .env.new; mv .env.new .env'
+        fi
+        echo "copied the encrypted profile${key:+ and its key}"
+    fi
     ;;
 run)
     ssh "$host" 'sudo systemctl start trawl.service; journalctl -u trawl -n 60 --no-pager'

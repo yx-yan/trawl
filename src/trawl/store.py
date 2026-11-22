@@ -66,6 +66,8 @@ CREATE TABLE IF NOT EXISTS applications (
     sent_at     TIMESTAMPTZ,  -- when the PDF went out with the digest
     UNIQUE (posting_id, source_hash)
 );
+-- M2b: drafted answers to the application form (no profile text values, only field names)
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS answers JSONB;
 """
 
 
@@ -101,6 +103,10 @@ class ToTailor:
     title: str
     description: str
     match: dict | None
+    source: str = ""
+    external_id: str = ""
+    url: str = ""
+    facts: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -112,6 +118,7 @@ class Application:
     tailoring: dict
     resume_tex: str
     resume_pdf: bytes
+    answers: list[dict] | None = None
 
 
 @dataclass
@@ -243,7 +250,8 @@ class Store:
         rows = self.conn.execute(
             """
             SELECT * FROM (
-                SELECT DISTINCT ON (fingerprint) id, company, title, description, match
+                SELECT DISTINCT ON (fingerprint) id, company, title, description, match, source,
+                       external_id, url, facts
                 FROM postings p
                 WHERE eligible AND (match->>'score')::int >= %s
                   AND (digested_at IS NULL OR resurface)
@@ -258,21 +266,24 @@ class Store:
 
     def posting(self, posting_id: int) -> ToTailor | None:
         row = self.conn.execute(
-            "SELECT id, company, title, description, match FROM postings WHERE id = %s", (posting_id,)
+            "SELECT id, company, title, description, match, source, external_id, url, facts "
+            "FROM postings WHERE id = %s", (posting_id,)
         ).fetchone()
         return ToTailor(**row) if row else None
 
     def save_application(self, posting_id: int, source_hash: str, tailoring: dict, tex: str,
-                         pdf: bytes) -> None:
+                         pdf: bytes, answers: list[dict] | None = None) -> None:
         self.conn.execute(
             """
-            INSERT INTO applications (posting_id, source_hash, tailoring, resume_tex, resume_pdf)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO applications (posting_id, source_hash, tailoring, resume_tex, resume_pdf, answers)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (posting_id, source_hash) DO UPDATE SET
                 tailoring = EXCLUDED.tailoring, resume_tex = EXCLUDED.resume_tex,
-                resume_pdf = EXCLUDED.resume_pdf, created_at = now(), sent_at = NULL
+                resume_pdf = EXCLUDED.resume_pdf, answers = EXCLUDED.answers, created_at = now(),
+                sent_at = NULL
             """,
-            (posting_id, source_hash, Jsonb(tailoring), tex, pdf),
+            (posting_id, source_hash, Jsonb(tailoring), tex, pdf,
+             Jsonb(answers) if answers is not None else None),
         )
 
     def application(self, posting_id: int, source_hash: str) -> Application | None:
@@ -287,7 +298,7 @@ class Store:
             """
             SELECT * FROM (
                 SELECT DISTINCT ON (a.posting_id) a.posting_id, p.company, p.title, p.url, a.tailoring,
-                       a.resume_tex, a.resume_pdf, a.sent_at
+                       a.resume_tex, a.resume_pdf, a.answers, a.sent_at
                 FROM applications a JOIN postings p ON p.id = a.posting_id
                 WHERE a.posting_id = ANY(%s) ORDER BY a.posting_id, a.created_at DESC
             ) t WHERE sent_at IS NULL
@@ -372,7 +383,8 @@ class Store:
 
 
 _APPLICATION = """
-    SELECT a.posting_id, p.company, p.title, p.url, a.tailoring, a.resume_tex, a.resume_pdf, a.sent_at
+    SELECT a.posting_id, p.company, p.title, p.url, a.tailoring, a.resume_tex, a.resume_pdf, a.answers,
+           a.sent_at
     FROM applications a JOIN postings p ON p.id = a.posting_id
 """
 

@@ -24,6 +24,7 @@ services:
       TRAWL_CRITERIA: /data/criteria.toml
       TRAWL_RESUME_CLASS: /data/resume-class
       TRAWL_BANK: /data/bank.toml
+      TRAWL_PROFILE: /data/profile.enc
     volumes:
       # ~/.trawl on the host holds the personal files (deploy/deploy.sh profile); read-only in here
       - ${HOME}/.trawl:/data:ro

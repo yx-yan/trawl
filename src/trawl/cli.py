@@ -1,26 +1,28 @@
 """Command line: `trawl collect`, `trawl process`, `trawl tailor`, `trawl digest`, `trawl run` (all
-four, for cron), and `trawl gaps`."""
+four, for cron), `trawl gaps`, and `trawl profile` (the encrypted answers that fill forms)."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
 
 import httpx
 
-from . import digest
+from . import answer, digest
+from . import profile as profiles
 from .config import HOME, Settings, Sources, load_dotenv
 from .connectors import CONNECTORS
 from .decide import Criteria
 from .extract import new_client
 from .match import load_resume, resume_path
 from .models import Posting
-from .process import process, redecide, tailor_new
+from .process import prepare, process, redecide, tailor_new
 from .store import Store
-from .tailor import Compiler, Resume, load_bank, parse, source_hash, tailor, xelatex
+from .tailor import Compiler, Resume, finish, load_bank, parse, source_hash, xelatex
 
 USER_AGENT = "trawl/0.1 (+https://github.com/yx-yan/trawl)"
 
@@ -58,12 +60,27 @@ def load_tailoring(settings: Settings) -> tuple[Resume, str, Compiler] | None:
     return parse(tex, bank), source_hash(tex, bank), xelatex(settings.resume_class)
 
 
-def tailor_ids(store: Store, settings: Settings, ids: list[int], out: Path, *, again: bool) -> None:
-    """Tailor a résumé for each posting id (whatever its score) and write it to out/<id>-<company>/."""
+def load_profile(settings: Settings) -> profiles.Profile | None:
+    """The decrypted profile, or None (with the reason on stderr): forms are still drafted, and
+    every profile question then waits for the person."""
+    try:
+        profile = profiles.load(settings.profile_path)
+    except RuntimeError as e:
+        print(f"profile: {e}", file=sys.stderr)
+        return None
+    if profile is None:
+        print(f"no profile at {settings.profile_path}: run `trawl profile edit`", file=sys.stderr)
+    return profile
+
+
+def tailor_ids(store: Store, settings: Settings, http: httpx.Client, ids: list[int], out: Path, *,
+               again: bool) -> None:
+    """Prepare each posting id (whatever its score) and write it to out/<id>-<company>/."""
     loaded = load_tailoring(settings)
     if loaded is None:
         sys.exit(1)
     resume, rhash, compile_tex = loaded
+    profile = load_profile(settings)
     client = None
     for pid in ids:
         p = store.posting(pid)
@@ -73,17 +90,27 @@ def tailor_ids(store: Store, settings: Settings, ids: list[int], out: Path, *, a
         app = None if again else store.application(pid, rhash)
         if app is None:
             client = client or new_client()
-            r = tailor(client, resume, compile_tex, company=p.company, title=p.title,
-                       description=p.description, fit_hint=p.match)
-            store.save_application(pid, rhash, r.record(), r.tex, r.pdf)
+            (t, usage), answers, note = prepare(client, resume, p, http, profile)
+            if note:
+                print(f"#{pid}: form: {note}", file=sys.stderr)
+            r = finish(resume, compile_tex, t, usage, p.title)
+            store.save_application(pid, rhash, r.record(), r.tex, r.pdf, answers)
             app = store.application(pid, rhash)
-        folder = out / f"{pid}-{re.sub(r'[^a-z0-9]+', '-', p.company.lower()).strip('-')}"
+        folder = out / f"{pid}-{_slug(p.company)}"
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "resume.pdf").write_bytes(app.resume_pdf)
         (folder / "resume.tex").write_text(app.resume_tex)
         (folder / "tailoring.json").write_text(json.dumps(app.tailoring, indent=2, ensure_ascii=False))
         print(digest.caption(app, limit=10_000))
-        print(f"  -> {folder / 'resume.pdf'}\n")
+        if app.answers is not None:
+            form = answer.render(app.answers, f"#{pid} {app.company}")
+            (folder / "answers.md").write_text(form + "\n")
+            print(f"\n{form}")
+        print(f"  -> {folder}\n")
+
+
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
 def send_digest(store: Store, settings: Settings, *, dry_run: bool) -> None:
@@ -94,6 +121,8 @@ def send_digest(store: Store, settings: Settings, *, dry_run: bool) -> None:
         print(text)
         for app in apps:
             print(f"\n[tailored résumé] {digest.caption(app)}")
+            if app.answers is not None:
+                print(f"\n{answer.render(app.answers, f'#{app.posting_id} {app.company}')}")
         if not dry_run:
             # Only what was really sent is marked, so these stay for the first real digest
             print("(TRAWL_TELEGRAM_TOKEN / TRAWL_TELEGRAM_CHAT_ID not set: printed, nothing marked as sent)",
@@ -102,10 +131,13 @@ def send_digest(store: Store, settings: Settings, *, dry_run: bool) -> None:
     digest.send_telegram(text, settings.telegram_token, settings.telegram_chat_id)
     store.mark_digested(batch)
     for app in apps:  # a résumé that fails to send goes out with the next digest
-        name = f"resume-{re.sub(r'[^a-z0-9]+', '-', app.company.lower()).strip('-')}-{app.posting_id}.pdf"
+        name = f"resume-{_slug(app.company)}-{app.posting_id}.pdf"
         try:
             digest.send_document(name, app.resume_pdf, digest.caption(app), settings.telegram_token,
                                  settings.telegram_chat_id)
+            if app.answers is not None:
+                digest.send_telegram(answer.render(app.answers, f"#{app.posting_id} {app.company}"),
+                                     settings.telegram_token, settings.telegram_chat_id)
         except httpx.HTTPError as e:
             print(f"  sending the résumé for #{app.posting_id} failed: {e}", file=sys.stderr)
             continue
@@ -131,10 +163,16 @@ def main(argv: list[str] | None = None) -> None:
     g = sub.add_parser("gaps", help="skills eligible jobs ask for that the résumé doesn't show")
     g.add_argument("--send", action="store_true", help="send to Telegram instead of printing")
     sub.add_parser("run", help="collect, process, tailor, then digest (what cron runs)")
+    pr = sub.add_parser("profile", help="the encrypted answers that fill application forms")
+    pr.add_argument("action", choices=["init", "edit", "show"],
+                    help="init: make a key for .env; edit: open it in $EDITOR; show: which fields are set")
     args = parser.parse_args(argv)
 
     load_dotenv()
     settings = Settings.from_env()
+    if args.command == "profile":
+        profile_command(args.action, settings)
+        return
     store = Store.connect(settings.database_url)
     criteria = Criteria.load(settings.criteria_path)
     if not settings.criteria_path.is_file():
@@ -156,12 +194,12 @@ def main(argv: list[str] | None = None) -> None:
                 print(f"no résumé at {resume_path()} (TRAWL_RESUME): jobs judged but not scored",
                       file=sys.stderr)
             print(process(store, criteria, http, new_client(), resume))
-    if args.command == "tailor" and args.ids:
-        tailor_ids(store, settings, args.ids, args.out, again=args.again)
-    elif args.command in ("tailor", "run") and (loaded := load_tailoring(settings)):
-        done, _ = tailor_new(store, new_client(), *loaded, min_score=settings.tailor_min_score,
-                             limit=settings.tailor_limit)
-        print(f"tailored {done} résumé{'s' if done != 1 else ''}")
+        if args.command == "tailor" and args.ids:
+            tailor_ids(store, settings, http, args.ids, args.out, again=args.again)
+        elif args.command in ("tailor", "run") and (loaded := load_tailoring(settings)):
+            done, _ = tailor_new(store, new_client(), *loaded, min_score=settings.tailor_min_score,
+                                 limit=settings.tailor_limit, http=http, profile=load_profile(settings))
+            print(f"prepared {done} application{'s' if done != 1 else ''}")
     if args.command in ("digest", "run"):
         send_digest(store, settings, dry_run=getattr(args, "dry_run", False))
     if args.command == "gaps":
@@ -170,3 +208,23 @@ def main(argv: list[str] | None = None) -> None:
             digest.send_telegram(text, settings.telegram_token, settings.telegram_chat_id)
         else:
             print(text)
+
+
+def profile_command(action: str, settings: Settings) -> None:
+    path = settings.profile_path
+    if action == "init":
+        if os.environ.get(profiles.KEY_ENV):
+            print(f"{profiles.KEY_ENV} is already set; `trawl profile edit` to fill in the profile")
+            return
+        print(f"Add this line to .env (here, and on the server), then run `trawl profile edit`:\n\n"
+              f"{profiles.KEY_ENV}={profiles.new_key()}")
+    elif action == "edit":
+        profiles.edit(path)
+        print(f"saved, encrypted: {path}")
+    else:
+        profile = profiles.load(path)
+        if profile is None:
+            print(f"no profile at {path}")
+            return
+        for name, v in profile.model_dump().items():  # names only: values stay off the terminal
+            print(f"{'✓' if v not in (None, '') else '·'} {name}")

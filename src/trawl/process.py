@@ -20,12 +20,14 @@ from dataclasses import dataclass, field
 
 import httpx
 
+from . import answer, forms
 from .connectors import mcf
 from .decide import Criteria, Verdict, decide, prefilter
-from .extract import Client, JobFacts, extract_with_retry, with_retry
+from .extract import Client, JobFacts, Usage, extract_with_retry, with_retry
 from .match import RISE, match
+from .profile import Profile
 from .store import Pending, Store, ToTailor
-from .tailor import Compiler, Resume, ask, finish
+from .tailor import Compiler, Resume, Tailoring, ask, finish
 
 WORKERS = 8
 
@@ -140,27 +142,47 @@ def redecide(store: Store, criteria: Criteria) -> int:
 
 
 def tailor_new(store: Store, client: Client, resume: Resume, source_hash: str, compile_tex: Compiler, *,
-               min_score: int, limit: int) -> tuple[int, list[str]]:
-    """Tailor a résumé for each well-fitting job about to go out; returns (tailored, failures).
-    Model calls run in parallel; compiling and saving stay on this thread."""
-    todo = store.to_tailor(source_hash, min_score, limit)
+               min_score: int, limit: int, http: httpx.Client | None = None,
+               profile: Profile | None = None) -> tuple[int, list[str]]:
+    """Prepare each well-fitting job about to go out: a tailored résumé, and with `http`, drafted
+    answers to its application form where trawl can read the form. Returns (prepared, failures).
+    Network and model calls run in parallel; compiling and saving stay on this thread."""
     failed: list[str] = []
     done = 0
-
-    def choose(p: ToTailor):
-        return with_retry(lambda: ask(client, resume, company=p.company, title=p.title,
-                                      description=p.description, fit=p.match))
-
-    for p, result in _parallel(choose, todo):
+    for p, result in _parallel(lambda p: prepare(client, resume, p, http, profile),
+                               store.to_tailor(source_hash, min_score, limit)):
         try:
             if isinstance(result, Exception):
                 raise result
-            r = finish(resume, compile_tex, *result, p.title)
+            (t, usage), answers, note = result
+            r = finish(resume, compile_tex, t, usage, p.title)
         except Exception as e:  # one job must not stop the rest
             failed.append(f"{p.company}: {p.title}: tailor: {e}")
             continue
-        store.save_application(p.id, source_hash, r.record(), r.tex, r.pdf)
+        if note:
+            failed.append(f"{p.company}: {p.title}: form: {note}")
+        store.save_application(p.id, source_hash, r.record(), r.tex, r.pdf, answers)
         done += 1
     for line in failed:
         print(f"  failed: {line}", file=sys.stderr)
     return done, failed
+
+
+def prepare(client: Client, resume: Resume, p: ToTailor, http: httpx.Client | None,
+             profile: Profile | None) -> tuple[tuple[Tailoring, Usage], list[dict] | None, str]:
+    """The model's tailoring, the drafted form answers (None if trawl can't read the form) and why
+    the form failed, if it did; a form that fails never stops the résumé."""
+    tailoring = with_retry(lambda: ask(client, resume, company=p.company, title=p.title,
+                                       description=p.description, fit=p.match))
+    if http is None:
+        return tailoring, None, ""
+    try:
+        questions = forms.fetch(http, p.source, p.external_id, p.facts, p.url)
+        if not questions:
+            return tailoring, None, ""
+        answers, _ = with_retry(lambda: answer.draft(client, questions, resume.text, profile,
+                                                     company=p.company, title=p.title,
+                                                     description=p.description))
+    except Exception as e:  # noqa: BLE001
+        return tailoring, None, str(e)
+    return tailoring, [a.to_dict() for a in answers], ""
