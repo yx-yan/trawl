@@ -26,5 +26,6 @@ def fetch(http: httpx.Client, board: str) -> list[Posting]:
             location=join_locations(job.get("location"), *secondary, remote),
             posted_at=parse_time(job.get("publishedAt")),
             description=(job.get("descriptionPlain") or "").strip(),
+            facts={"board": board},  # to read the application form later
         ))
     return postings

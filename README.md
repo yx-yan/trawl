@@ -21,8 +21,8 @@ with evals, a human approval queue, an audit log, and a Docker deployment.
 |---|---|---|
 | M0 | Collect from Greenhouse, Lever, Ashby, MyCareersFuture; daily Telegram digest | ✅ |
 | M1 | Judge each job by its description (model facts, rule verdicts), score fit against the résumé, weekly skill-gap report; evals | ✅ |
-| M2 | A résumé tailored to each good fit, sent with the digest; then the approval queue | 🚧 |
-| M3 | Application filler: pre-fill, screenshot, wait for approval, then submit | |
+| M2 | A résumé tailored to each good fit and drafted form answers, sent with the digest | ✅ |
+| M3 | Approval queue and application filler: pre-fill, screenshot, wait for approval, then submit | |
 | M4 | Status tracking from Gmail, funnel dashboard | |
 | M5 | Multi-tenant, RBAC, PII encryption, tracing, delivery docs | |
 
@@ -35,7 +35,9 @@ cp .env.example .env                     # add a Telegram bot token to get the d
 .venv/bin/trawl collect                  # fetch every board in sources.toml
 .venv/bin/trawl process                  # verdict per posting: rules, then DeepSeek (DEEPSEEK_API_KEY)
 .venv/bin/trawl tailor                   # a tailored résumé for each new job scoring 60+
-.venv/bin/trawl tailor 676 --out out/    # one job by its digest #id, written as PDF + LaTeX
+.venv/bin/trawl tailor 676 --out out/    # one job by its digest #id: PDF, LaTeX, form answers
+.venv/bin/trawl profile init             # a key for the encrypted profile (put it in .env)
+.venv/bin/trawl profile edit             # what fills forms: name, contacts, dates, visa (never sent to the model)
 .venv/bin/trawl digest --dry-run         # print what the digest would send
 .venv/bin/trawl run                      # all four; this is what cron runs
 .venv/bin/trawl gaps                     # skills the jobs ask for that the résumé doesn't show

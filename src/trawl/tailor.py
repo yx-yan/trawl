@@ -297,6 +297,7 @@ def invented(new: str, source: str, numbers_from: str | None = None) -> list[str
     """
     new = new.replace("**", "")
     known = " ".join(source.replace("**", "").lower().split())
+    known += " " + " ".join(_acronyms(source))
     allowed_numbers = set(_NUMBER.findall(numbers_from if numbers_from is not None else source))
     found = [n for n in _NUMBER.findall(new) if n not in allowed_numbers]
     for m in _WORD.finditer(new):
@@ -308,6 +309,15 @@ def invented(new: str, source: str, numbers_from: str | None = None) -> list[str
         if is_name and not re.search(rf"(?<![a-z0-9]){re.escape(w.lower())}(?![a-z0-9])", known):
             found.append(w)
     return list(dict.fromkeys(found))
+
+
+def _acronyms(text: str) -> list[str]:
+    """Initials of runs of capitalized words: 'Final Year Project' -> fyp (and fy, yp)."""
+    out = []
+    for run in re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+", text):
+        initials = "".join(w[0] for w in run.split()).lower()
+        out += [initials[i:j] for i in range(len(initials)) for j in range(i + 2, len(initials) + 1)]
+    return out
 
 
 def _same(a: str, b: str) -> bool:

@@ -304,3 +304,8 @@ def test_the_summary_may_name_the_job() -> None:
     t = choices(summary="NTU M.Sc. student, focused on **LLM agents**. Seeking Forward Deployed roles.")
     assert apply(resume, t).notes[0].startswith("summary kept")
     assert apply(resume, t, "Forward Deployed Engineer").notes == []
+
+
+def test_invented_knows_acronyms_of_names_in_the_source() -> None:
+    assert invented("My FYP used PyTorch.", "Final Year Project: CT, with PyTorch") == []
+    assert invented("My MSc used PyTorch.", "Final Year Project: CT, with PyTorch") == ["MSc"]

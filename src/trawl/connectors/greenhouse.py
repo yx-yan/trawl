@@ -24,5 +24,6 @@ def fetch(http: httpx.Client, board: str) -> list[Posting]:
             posted_at=parse_time(job.get("first_published") or job.get("updated_at")),
             # `content` is HTML that has itself been HTML-escaped
             description=html_to_text(html_to_text(job.get("content") or "")),
+            facts={"board": board},  # to read the application form later
         ))
     return postings
