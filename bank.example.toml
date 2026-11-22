@@ -1,0 +1,11 @@
+# Spare résumé bullets: true things that don't fit on the one-page master résumé. When a job
+# values one of them more than a bullet on the page, the tailor may swap it in, worded as needed
+# but held to the facts written here, like every other bullet.
+#
+# It lives next to the résumé in the private résumé repo as bank.toml, written and reviewed
+# like the résumé itself; `deploy/deploy.sh profile` copies it to ~/.trawl/bank.toml.
+
+# An example: replace it with your own, true bullets.
+[[bullet]]
+entry = "Solfish"   # the first résumé entry whose title contains this text
+latex = '''Added a \textbf{long-term memory} of past sessions, searched by keyword before each task.'''

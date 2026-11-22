@@ -53,6 +53,19 @@ ALTER TABLE postings
     ADD COLUMN IF NOT EXISTS match       JSONB,
     ADD COLUMN IF NOT EXISTS resume_hash TEXT,
     ADD COLUMN IF NOT EXISTS resurface   BOOLEAN NOT NULL DEFAULT false;
+-- M2: a résumé tailored to each job; M3 will move each one through approval to submission
+CREATE TABLE IF NOT EXISTS applications (
+    id          BIGSERIAL PRIMARY KEY,
+    posting_id  BIGINT NOT NULL REFERENCES postings (id),
+    source_hash TEXT NOT NULL,  -- the résumé and bank it was tailored from
+    status      TEXT NOT NULL DEFAULT 'drafted',
+    tailoring   JSONB NOT NULL,  -- the model's choices, what was put back or cut, token use
+    resume_tex  TEXT NOT NULL,
+    resume_pdf  BYTEA NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    sent_at     TIMESTAMPTZ,  -- when the PDF went out with the digest
+    UNIQUE (posting_id, source_hash)
+);
 """
 
 
@@ -79,6 +92,26 @@ class ToMatch:
     description: str
     match: dict | None
     digested: bool
+
+
+@dataclass
+class ToTailor:
+    id: int
+    company: str
+    title: str
+    description: str
+    match: dict | None
+
+
+@dataclass
+class Application:
+    posting_id: int
+    company: str
+    title: str
+    url: str
+    tailoring: dict
+    resume_tex: str
+    resume_pdf: bytes
 
 
 @dataclass
@@ -203,6 +236,70 @@ class Store:
             (Jsonb(match), resume_hash, resurface, posting_id),
         )
 
+    def to_tailor(self, source_hash: str, min_score: int, limit: int) -> list[ToTailor]:
+        """Eligible jobs about to go out in the digest (new, or back because they fit better) that
+        score at least `min_score` and have no résumé tailored from this résumé and bank yet.
+        One per fingerprint, best scores first."""
+        rows = self.conn.execute(
+            """
+            SELECT * FROM (
+                SELECT DISTINCT ON (fingerprint) id, company, title, description, match
+                FROM postings p
+                WHERE eligible AND (match->>'score')::int >= %s
+                  AND (digested_at IS NULL OR resurface)
+                  AND NOT EXISTS (SELECT 1 FROM applications a
+                                  WHERE a.posting_id = p.id AND a.source_hash = %s)
+                ORDER BY fingerprint, (source = 'mcf'), first_seen
+            ) t ORDER BY (match->>'score')::int DESC, id LIMIT %s
+            """,
+            (min_score, source_hash, limit),
+        ).fetchall()
+        return [ToTailor(**r) for r in rows]
+
+    def posting(self, posting_id: int) -> ToTailor | None:
+        row = self.conn.execute(
+            "SELECT id, company, title, description, match FROM postings WHERE id = %s", (posting_id,)
+        ).fetchone()
+        return ToTailor(**row) if row else None
+
+    def save_application(self, posting_id: int, source_hash: str, tailoring: dict, tex: str,
+                         pdf: bytes) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO applications (posting_id, source_hash, tailoring, resume_tex, resume_pdf)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (posting_id, source_hash) DO UPDATE SET
+                tailoring = EXCLUDED.tailoring, resume_tex = EXCLUDED.resume_tex,
+                resume_pdf = EXCLUDED.resume_pdf, created_at = now(), sent_at = NULL
+            """,
+            (posting_id, source_hash, Jsonb(tailoring), tex, pdf),
+        )
+
+    def application(self, posting_id: int, source_hash: str) -> Application | None:
+        row = self.conn.execute(
+            f"{_APPLICATION} WHERE a.posting_id = %s AND a.source_hash = %s", (posting_id, source_hash)
+        ).fetchone()
+        return _application(row) if row else None
+
+    def unsent_applications(self, posting_ids: list[int]) -> list[Application]:
+        """The newest tailored résumé of each of these postings, if it hasn't been sent."""
+        rows = self.conn.execute(
+            """
+            SELECT * FROM (
+                SELECT DISTINCT ON (a.posting_id) a.posting_id, p.company, p.title, p.url, a.tailoring,
+                       a.resume_tex, a.resume_pdf, a.sent_at
+                FROM applications a JOIN postings p ON p.id = a.posting_id
+                WHERE a.posting_id = ANY(%s) ORDER BY a.posting_id, a.created_at DESC
+            ) t WHERE sent_at IS NULL
+            """,
+            (posting_ids,),
+        ).fetchall()
+        return [_application(r) for r in rows]
+
+    def mark_application_sent(self, posting_id: int) -> None:
+        self.conn.execute("UPDATE applications SET sent_at = now() WHERE posting_id = %s AND sent_at IS NULL",
+                          (posting_id,))
+
     def gap_counts(self, days: int = 14) -> list[tuple[str, int, int]]:
         """(gap, jobs, FDE jobs) across eligible jobs still listed in the last `days` days."""
         rows = self.conn.execute(
@@ -272,6 +369,17 @@ class Store:
             )
             self.conn.execute("UPDATE postings SET resurface = false WHERE id = ANY(%s)",
                               ([r.id for r in batch.resurfaced],))
+
+
+_APPLICATION = """
+    SELECT a.posting_id, p.company, p.title, p.url, a.tailoring, a.resume_tex, a.resume_pdf, a.sent_at
+    FROM applications a JOIN postings p ON p.id = a.posting_id
+"""
+
+
+def _application(row: dict) -> Application:
+    return Application(**{k: v for k, v in row.items() if k != "sent_at"}
+                       | {"resume_pdf": bytes(row["resume_pdf"])})
 
 
 def _reason_kind(reason: str) -> str:

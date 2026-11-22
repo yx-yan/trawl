@@ -15,7 +15,7 @@ TEX = r"""
 \documentclass{resume-en}
 \begin{document}
 \name{Yuxuan \surname{Yan}}
-\contact{Mobile Phone: (+65) 8425 6171 / Email: \email{me@example.com}}
+\contact{Mobile Phone: (+65) 0000 1111 / Email: \email{me@example.com}}
 \section{Professional Summary}
 NTU M.Sc.\ student, focused on \textbf{LLM agents}. % TODO(确认): private note
 \section{Projects}
@@ -33,7 +33,7 @@ def test_resume_text_keeps_content_and_drops_contact_details_and_comments() -> N
     assert "## Professional Summary" in text and "LLM agents" in text
     assert "Solfish: Personal AI Agent (Oct 2026 -- Present)" in text
     assert "Python, DeepSeek API" in text and "- Wrote the agent loop by hand" in text
-    assert "8425" not in text and "example.com" not in text and "Yan" not in text
+    assert "0000" not in text and "example.com" not in text and "Yan" not in text
     assert "TODO" not in text and "\\" not in text
 
 

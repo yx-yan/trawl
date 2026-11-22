@@ -21,7 +21,7 @@ with evals, a human approval queue, an audit log, and a Docker deployment.
 |---|---|---|
 | M0 | Collect from Greenhouse, Lever, Ashby, MyCareersFuture; daily Telegram digest | ✅ |
 | M1 | Judge each job by its description (model facts, rule verdicts), score fit against the résumé, weekly skill-gap report; evals | ✅ |
-| M2 | Approval queue (Next.js) and tailored résumé per job | |
+| M2 | A résumé tailored to each good fit, sent with the digest; then the approval queue | 🚧 |
 | M3 | Application filler: pre-fill, screenshot, wait for approval, then submit | |
 | M4 | Status tracking from Gmail, funnel dashboard | |
 | M5 | Multi-tenant, RBAC, PII encryption, tracing, delivery docs | |
@@ -34,8 +34,10 @@ python -m venv .venv && .venv/bin/pip install -e ".[dev]"
 cp .env.example .env                     # add a Telegram bot token to get the digest on your phone
 .venv/bin/trawl collect                  # fetch every board in sources.toml
 .venv/bin/trawl process                  # verdict per posting: rules, then DeepSeek (DEEPSEEK_API_KEY)
+.venv/bin/trawl tailor                   # a tailored résumé for each new job scoring 60+
+.venv/bin/trawl tailor 676 --out out/    # one job by its digest #id, written as PDF + LaTeX
 .venv/bin/trawl digest --dry-run         # print what the digest would send
-.venv/bin/trawl run                      # all three; this is what cron runs
+.venv/bin/trawl run                      # all four; this is what cron runs
 .venv/bin/trawl gaps                     # skills the jobs ask for that the résumé doesn't show
 ```
 
@@ -45,8 +47,11 @@ Which companies and searches to watch lives in [`sources.toml`](sources.toml). W
 (graduation date, experience, work pass) is personal, so it lives outside the repo in
 `~/.trawl/criteria.toml`: copy [`criteria.example.toml`](criteria.example.toml) there and fill it in.
 After editing it, `trawl process --redecide` re-applies it without new model calls. The résumé is
-read from `~/.trawl/resume.tex` (or `TRAWL_RESUME`); `deploy/deploy.sh profile` copies both to the
-server.
+read from `~/.trawl/resume.tex` (or `TRAWL_RESUME`), spare bullets for tailoring from
+`~/.trawl/bank.toml` (format in [`bank.example.toml`](bank.example.toml)), and tailored résumés
+compile with XeLaTeX against the résumé's class and fonts in `~/.trawl/resume-class`.
+`deploy/deploy.sh profile` copies all of these from the résumé repo to the server;
+`TRAWL_DEPLOY_HOST=local deploy/deploy.sh profile` fills this machine's `~/.trawl`.
 
 ## Tests
 

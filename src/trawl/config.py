@@ -9,7 +9,8 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 REPO_SOURCES = REPO / "sources.toml"
-HOME_CRITERIA = Path.home() / ".trawl" / "criteria.toml"  # personal, never in the repo
+HOME = Path.home() / ".trawl"  # personal files, never in the repo
+HOME_CRITERIA = HOME / "criteria.toml"
 
 
 @dataclass
@@ -19,6 +20,11 @@ class Settings:
     criteria_path: Path = HOME_CRITERIA
     telegram_token: str | None = None
     telegram_chat_id: str | None = None
+    # the résumé's class and fonts, to compile tailored résumés (deploy/deploy.sh profile)
+    resume_class: Path = HOME / "resume-class"
+    bank_path: Path = HOME / "bank.toml"  # spare bullets the tailor may use
+    tailor_min_score: int = 60  # tailor a résumé for jobs that fit at least this well
+    tailor_limit: int = 10  # at most this many per run
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -28,6 +34,10 @@ class Settings:
             criteria_path=Path(os.environ.get("TRAWL_CRITERIA", HOME_CRITERIA)),
             telegram_token=os.environ.get("TRAWL_TELEGRAM_TOKEN"),
             telegram_chat_id=os.environ.get("TRAWL_TELEGRAM_CHAT_ID"),
+            resume_class=Path(os.environ.get("TRAWL_RESUME_CLASS", cls.resume_class)),
+            bank_path=Path(os.environ.get("TRAWL_BANK", cls.bank_path)),
+            tailor_min_score=int(os.environ.get("TRAWL_TAILOR_MIN_SCORE", cls.tailor_min_score)),
+            tailor_limit=int(os.environ.get("TRAWL_TAILOR_LIMIT", cls.tailor_limit)),
         )
 
 

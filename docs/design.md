@@ -107,3 +107,29 @@ strengths and gaps under each job.
   rescores the jobs.
 - **Personal files stay out of this public repo.** The résumé and the criteria live in `~/.trawl`
   on each machine; `deploy/deploy.sh profile` copies them to the server.
+
+## 10. Tailoring the résumé: the model chooses, it never writes
+
+Each good fit (score 60+) about to go out in the digest gets its own résumé, sent as a PDF right
+after the digest with what was changed and why. `trawl tailor <id>` does the same for any job.
+
+- **Choices, not a document.** The model sees the résumé (from the first section; no contact
+  details) with an id on every entry, bullet and skill row, and answers with choices: the summary,
+  which bullets to keep in what order and how each is worded, the order of entries and skill rows.
+  Sections without ids (education, awards) can't change, and the LaTeX is rebuilt from the master's
+  own source, so the header and layout are exactly the master's.
+- **Every reworded bullet is held to its source.** A number not in that bullet, or a name (PyTorch,
+  AWS, Kubernetes: a word with a capital that doesn't start a sentence, an inner capital or a digit)
+  not in the entry or the skills, is a made-up fact: that bullet goes back to its original wording,
+  and the digest says so. The summary is held to the whole résumé and may name the job it's for.
+- **One page, cut from the bottom.** While XeLaTeX reports a second page, the last bullet of the
+  longest entry goes (the model put the least relevant last), and the digest says which.
+- **What changed is counted, not reported.** The model's own notes said it had dropped sections it
+  can't touch, so the digest lists the real edits (reworded, left out, spare used, reordered),
+  computed by comparing with the master, above the model's reasons.
+- **Spare bullets.** True things that don't fit on the page live in `bank.toml` next to the résumé,
+  under the same review; the model may swap them in.
+- **Tied to the résumé.** A tailored résumé is kept per job and per hash of the résumé and bank; a
+  new résumé means new tailored versions for jobs not yet sent. PDFs live in Postgres, so the
+  container needs no writable volume. The master résumé is never written: Solfish stays its only
+  writer.
