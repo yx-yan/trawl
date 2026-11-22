@@ -4,13 +4,15 @@
 #   TRAWL_DEPLOY_HOST=user@1.2.3.4 deploy/deploy.sh        # pull, start the db, install the timer
 #   TRAWL_DEPLOY_HOST=user@1.2.3.4 deploy/deploy.sh run    # run collect + digest now
 #   TRAWL_DEPLOY_HOST=user@1.2.3.4 deploy/deploy.sh logs   # recent runs
-#   TRAWL_DEPLOY_HOST=user@1.2.3.4 deploy/deploy.sh profile  # copy résumé + criteria to ~/.trawl
+#   TRAWL_DEPLOY_HOST=user@1.2.3.4 deploy/deploy.sh profile  # copy résumé, bank, criteria to ~/.trawl
 #
-# Personal files stay out of this public repo. `profile` copies ~/.trawl/criteria.toml, and
-# resume-en.tex as it is on the private résumé repo's origin/main (merged = approved; local
-# drafts never leave the Mac). TRAWL_RESUME_REPO points at that clone (default: ../resume).
+# Personal files stay out of this public repo. `profile` copies ~/.trawl/criteria.toml, and from
+# the private résumé repo's origin/main (merged = approved; local drafts never leave the Mac):
+# resume-en.tex, bank.toml if there is one, and the class and fonts that compile tailored
+# résumés. TRAWL_RESUME_REPO points at that clone (default: ../resume). With TRAWL_DEPLOY_HOST=local
+# it fills this Mac's ~/.trawl the same way.
 set -euo pipefail
-host="${TRAWL_DEPLOY_HOST:?set TRAWL_DEPLOY_HOST=user@host}"
+host="${TRAWL_DEPLOY_HOST:?set TRAWL_DEPLOY_HOST=user@host (or local, for profile)}"
 
 case "${1:-deploy}" in
 deploy)
@@ -29,10 +31,18 @@ deploy)
     ;;
 profile)
     repo="${TRAWL_RESUME_REPO:-$(dirname "$0")/../../resume}"
+    on() { if [ "$host" = local ]; then bash -c "$1"; else ssh "$host" "$1"; fi; }
     git -C "$repo" fetch -q origin
-    git -C "$repo" show origin/main:resume-en.tex | ssh "$host" 'umask 077 && mkdir -p ~/.trawl && cat > ~/.trawl/resume.tex'
-    ssh "$host" 'umask 077 && cat > ~/.trawl/criteria.toml' < ~/.trawl/criteria.toml
-    echo "copied criteria.toml and resume-en.tex from origin/main ($(git -C "$repo" rev-parse --short origin/main))"
+    git -C "$repo" show origin/main:resume-en.tex | on 'umask 077 && mkdir -p ~/.trawl && cat > ~/.trawl/resume.tex'
+    if git -C "$repo" cat-file -e origin/main:bank.toml 2>/dev/null; then
+        git -C "$repo" show origin/main:bank.toml | on 'umask 077 && cat > ~/.trawl/bank.toml'
+    else
+        on 'rm -f ~/.trawl/bank.toml'
+    fi
+    git -C "$repo" archive origin/main resume-en.cls fontawesome.sty fonts \
+        | on 'rm -rf ~/.trawl/resume-class && mkdir -p ~/.trawl/resume-class && tar -x -C ~/.trawl/resume-class'
+    [ "$host" = local ] || ssh "$host" 'umask 077 && cat > ~/.trawl/criteria.toml' < ~/.trawl/criteria.toml
+    echo "copied résumé, bank, class and criteria from origin/main ($(git -C "$repo" rev-parse --short origin/main))"
     ;;
 run)
     ssh "$host" 'sudo systemctl start trawl.service; journalctl -u trawl -n 60 --no-pager'

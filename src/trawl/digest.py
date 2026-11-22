@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import httpx
 
-from .store import Batch, Row
+from .store import Application, Batch, Row
 
 TELEGRAM_LIMIT = 4096
 HEADINGS = {"fde": "FDE roles", "path": "Paths into FDE"}
@@ -41,7 +41,16 @@ def _entry(r: Row) -> str:
             fit.append("− " + ", ".join(r.match["gaps"][:3]))
         if fit:
             line += "\n  " + " · ".join(fit)
-    return f"{line}\n  {r.url}"
+    return f"{line}\n  #{r.id} {r.url}"
+
+
+def caption(app: Application, limit: int = 1024) -> str:
+    """What goes under a tailored résumé in Telegram: the job, and what was changed for it."""
+    lines = [f"#{app.posting_id} {app.company}: {app.title}"]
+    lines += [f"Δ {e}" for e in app.tailoring.get("edits", [])]
+    lines += [f"• {c}" for c in app.tailoring.get("tailoring", {}).get("changes", [])]
+    lines += [f"⚠ {n}" for n in app.tailoring.get("notes", [])]
+    return "\n".join(lines)[:limit]
 
 
 def render_gaps(gaps: list[tuple[str, int, int]], top: int = 12) -> str:
@@ -75,3 +84,12 @@ def send_telegram(text: str, token: str, chat_id: str, http: httpx.Client | None
         resp = http.post(f"https://api.telegram.org/bot{token}/sendMessage",
                          json={"chat_id": chat_id, "text": part, "disable_web_page_preview": True})
         resp.raise_for_status()
+
+
+def send_document(name: str, data: bytes, caption_text: str, token: str, chat_id: str,
+                  http: httpx.Client | None = None) -> None:
+    http = http or httpx.Client(timeout=60)
+    resp = http.post(f"https://api.telegram.org/bot{token}/sendDocument",
+                     data={"chat_id": chat_id, "caption": caption_text},
+                     files={"document": (name, data, "application/pdf")})
+    resp.raise_for_status()

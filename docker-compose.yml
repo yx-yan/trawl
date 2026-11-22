@@ -22,6 +22,8 @@ services:
       TRAWL_DATABASE_URL: postgresql://trawl:trawl@db:5432/trawl
       TRAWL_RESUME: /data/resume.tex
       TRAWL_CRITERIA: /data/criteria.toml
+      TRAWL_RESUME_CLASS: /data/resume-class
+      TRAWL_BANK: /data/bank.toml
     volumes:
       # ~/.trawl on the host holds the personal files (deploy/deploy.sh profile); read-only in here
       - ${HOME}/.trawl:/data:ro

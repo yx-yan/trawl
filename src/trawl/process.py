@@ -5,6 +5,7 @@
    run again with the new facts.
 3. The model reads what's left; rules turn its facts into the verdict.
 4. Eligible jobs are scored against the résumé, and scored again when the résumé changes.
+5. (`tailor_new`) The best fits about to go out in the digest get a résumé tailored to them.
 
 Network and model calls run in a thread pool; all database writes stay on the calling thread.
 A posting whose call fails keeps no verdict and is retried on the next run.
@@ -23,7 +24,8 @@ from .connectors import mcf
 from .decide import Criteria, Verdict, decide, prefilter
 from .extract import Client, JobFacts, extract_with_retry, with_retry
 from .match import RISE, match
-from .store import Pending, Store
+from .store import Pending, Store, ToTailor
+from .tailor import Compiler, Resume, ask, finish
 
 WORKERS = 8
 
@@ -135,3 +137,30 @@ def redecide(store: Store, criteria: Criteria) -> int:
         count += 1
     store.forget_rule_verdicts()
     return count
+
+
+def tailor_new(store: Store, client: Client, resume: Resume, source_hash: str, compile_tex: Compiler, *,
+               min_score: int, limit: int) -> tuple[int, list[str]]:
+    """Tailor a résumé for each well-fitting job about to go out; returns (tailored, failures).
+    Model calls run in parallel; compiling and saving stay on this thread."""
+    todo = store.to_tailor(source_hash, min_score, limit)
+    failed: list[str] = []
+    done = 0
+
+    def choose(p: ToTailor):
+        return with_retry(lambda: ask(client, resume, company=p.company, title=p.title,
+                                      description=p.description, fit=p.match))
+
+    for p, result in _parallel(choose, todo):
+        try:
+            if isinstance(result, Exception):
+                raise result
+            r = finish(resume, compile_tex, *result, p.title)
+        except Exception as e:  # one job must not stop the rest
+            failed.append(f"{p.company}: {p.title}: tailor: {e}")
+            continue
+        store.save_application(p.id, source_hash, r.record(), r.tex, r.pdf)
+        done += 1
+    for line in failed:
+        print(f"  failed: {line}", file=sys.stderr)
+    return done, failed
