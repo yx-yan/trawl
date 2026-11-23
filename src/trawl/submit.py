@@ -101,7 +101,7 @@ def plan(answers: list[dict], profile: Profile | None, source: str = "greenhouse
             v = degree_level(v)
         if field not in have and isinstance(v, str) and v:
             steps.append(Step(field, label, "choose", [v], secret=key not in PUBLIC, optional=True,
-                              opens="Add another" if field.endswith("--1") else ""))
+                              opens="Add another" if field == "school--1" else ""))
     return Plan(steps, left)
 
 

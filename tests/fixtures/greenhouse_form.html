@@ -59,13 +59,15 @@ function wire(input) {
   });
 }
 document.querySelectorAll('[role=combobox]').forEach(wire);
-function addEducation() {  // a second school and degree, as Greenhouse's "Add another" adds them
-  document.getElementById('education').innerHTML = `
-    <div class="select__control"><label for="school--1">School*</label>
-      <input id="school--1" role="combobox" aria-required="true" data-options="Wuhan University|Wuhan University of Technology"></div>
-    <div class="select__control"><label for="degree--1">Degree*</label>
-      <input id="degree--1" role="combobox" aria-required="true" data-options="Bachelor's Degree|Master's Degree"></div>`;
-  document.querySelectorAll('#education [role=combobox]').forEach(wire);
+let entries = 1;
+function addEducation() {  // one more school and degree per click, as Greenhouse's "Add another"
+  const n = entries++;
+  document.getElementById('education').insertAdjacentHTML('beforeend', `
+    <div class="select__control"><label for="school--${n}">School*</label>
+      <input id="school--${n}" role="combobox" aria-required="true" data-options="Wuhan University|Wuhan University of Technology"></div>
+    <div class="select__control"><label for="degree--${n}">Degree*</label>
+      <input id="degree--${n}" role="combobox" aria-required="true" data-options="Bachelor's Degree|Master's Degree"></div>`);
+  document.querySelectorAll('#education [role=combobox]:not([data-wired])').forEach(e => { e.dataset.wired = 1; wire(e); });
 }
 function go(event) {
   event.preventDefault();

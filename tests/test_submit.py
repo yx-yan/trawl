@@ -82,14 +82,17 @@ def test_plan_answers_what_waited_for_the_profile_once_it_has_it() -> None:
 
 
 EARLIER = PROFILE.model_copy(update={"previous_university": "Wuhan University",
-                                     "previous_degree": "Bachelor of Engineering"})
+                                     "previous_degree": "Bachelor of Engineering",
+                                     "previous_major": "Energy Storage Science and Engineering"})
 
 
 def test_plan_adds_an_earlier_degree_behind_add_another() -> None:
     steps = {s.field: s for s in plan([], EARLIER).steps}
     assert steps["school--1"] == Step("school--1", "Earlier school", "choose", ["Wuhan University"],
                                       optional=True, opens="Add another")
-    assert steps["degree--1"].value == ["Bachelor's Degree"] and steps["degree--1"].opens == "Add another"
+    # only the school opens the entry: a field the page lacks (discipline) must not add another one
+    assert steps["degree--1"].value == ["Bachelor's Degree"] and not steps["degree--1"].opens
+    assert not steps["discipline--1"].opens
     assert "school--1" not in {s.field for s in plan([], PROFILE).steps}
 
 
@@ -289,7 +292,9 @@ def test_fill_clicks_add_another_for_the_earlier_degree(page, tmp_path: Path) ->
     assert fill.fill(page, steps, tmp_path / "x.pdf").failed == []
     chosen = page.locator("#education .select__single-value").all_inner_texts()
     assert chosen == ["Wuhan University", "Bachelor's Degree"]  # never "Wuhan University of Technology"
-    assert page.locator('[id="school--1"]').count() == 1  # clicked once, not once per field
+    # clicked once: the page has no discipline field, and that mustn't add a third entry
+    assert page.locator('[id="school--1"]').count() == 1
+    assert page.locator('#education .select__control').count() == 2
 
 
 def test_a_choice_no_option_matches_is_left_to_you(page, tmp_path: Path) -> None:  # noqa: ANN001
