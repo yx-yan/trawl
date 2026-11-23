@@ -2,7 +2,8 @@
 <!-- A stand-in for job-boards.greenhouse.io's form, with the parts trawl relies on: fields by the
      API's names, react-select style comboboxes (options in the listbox named by aria-controls, the
      choice shown in the control, the input left empty), a checkbox group named question_x[], a
-     required consent, an email the browser checks itself, and a Submit that rejects an unticked
+     required consent, an "Add another" button for a second school and degree, an email the browser
+     checks itself, and a Submit that rejects an unticked
      consent and otherwise thanks you. -->
 <html><body>
 <p>Thank you for your interest in Example. We build things.</p>
@@ -19,6 +20,8 @@
     <input id="school--0" role="combobox" aria-required="true"
            data-options="Nanyang Polytechnic (NYP)|Nanyang Technological University (NTU)">
   </div>
+  <div id="education"></div>
+  <button type="button" onclick="addEducation()">Add another</button>
   <fieldset><legend>When can you start?*</legend>
     <input type="checkbox" id="q2_a" name="question_2[]" aria-required="true"><label for="q2_a">Q2 2027 (April - June)</label>
     <input type="checkbox" id="q2_b" name="question_2[]" aria-required="true"><label for="q2_b">Q3 2027 (July - September)</label>
@@ -29,7 +32,7 @@
   <button type="submit">Submit application</button>
 </form>
 <script>
-for (const input of document.querySelectorAll('[role=combobox]')) {
+function wire(input) {
   const list = document.createElement('div');
   list.id = 'react-select-' + input.id + '-listbox';
   input.after(list);
@@ -54,6 +57,17 @@ for (const input of document.querySelectorAll('[role=combobox]')) {
       list.append(opt);
     }
   });
+}
+document.querySelectorAll('[role=combobox]').forEach(wire);
+let entries = 1;
+function addEducation() {  // one more school and degree per click, as Greenhouse's "Add another"
+  const n = entries++;
+  document.getElementById('education').insertAdjacentHTML('beforeend', `
+    <div class="select__control"><label for="school--${n}">School*</label>
+      <input id="school--${n}" role="combobox" aria-required="true" data-options="Wuhan University|Wuhan University of Technology"></div>
+    <div class="select__control"><label for="degree--${n}">Degree*</label>
+      <input id="degree--${n}" role="combobox" aria-required="true" data-options="Bachelor's Degree|Master's Degree"></div>`);
+  document.querySelectorAll('#education [role=combobox]:not([data-wired])').forEach(e => { e.dataset.wired = 1; wire(e); });
 }
 function go(event) {
   event.preventDefault();

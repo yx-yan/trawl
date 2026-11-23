@@ -81,6 +81,21 @@ def test_plan_answers_what_waited_for_the_profile_once_it_has_it() -> None:
     assert pl.left == ["GPA? (not in your profile: gpa)", "I confirm this is true (a consent: yours to give)"]
 
 
+EARLIER = PROFILE.model_copy(update={"previous_university": "Wuhan University",
+                                     "previous_degree": "Bachelor of Engineering",
+                                     "previous_major": "Energy Storage Science and Engineering"})
+
+
+def test_plan_adds_an_earlier_degree_behind_add_another() -> None:
+    steps = {s.field: s for s in plan([], EARLIER).steps}
+    assert steps["school--1"] == Step("school--1", "Earlier school", "choose", ["Wuhan University"],
+                                      optional=True, opens="Add another")
+    # only the school opens the entry: a field the page lacks (discipline) must not add another one
+    assert steps["degree--1"].value == ["Bachelor's Degree"] and not steps["degree--1"].opens
+    assert not steps["discipline--1"].opens
+    assert "school--1" not in {s.field for s in plan([], PROFILE).steps}
+
+
 def test_plan_log_and_shown_never_carry_profile_values() -> None:
     pl = plan(ANSWERS, PROFILE)
     text = repr(pl.log()) + " ".join(s.shown() for s in pl.steps)
@@ -272,6 +287,16 @@ def test_fill_then_submit_once_the_person_has_consented(page, tmp_path: Path) ->
     assert fill.submit(page, fill.BOARDS["greenhouse"], wait_s=3).outcome == "confirmed"
 
 
+def test_fill_clicks_add_another_for_the_earlier_degree(page, tmp_path: Path) -> None:  # noqa: ANN001
+    steps = [s for s in plan([], EARLIER).steps if s.field.endswith("--1")]
+    assert fill.fill(page, steps, tmp_path / "x.pdf").failed == []
+    chosen = page.locator("#education .select__single-value").all_inner_texts()
+    assert chosen == ["Wuhan University", "Bachelor's Degree"]  # never "Wuhan University of Technology"
+    # clicked once: the page has no discipline field, and that mustn't add a third entry
+    assert page.locator('[id="school--1"]').count() == 1
+    assert page.locator('#education .select__control').count() == 2
+
+
 def test_a_choice_no_option_matches_is_left_to_you(page, tmp_path: Path) -> None:  # noqa: ANN001
     filled = fill.fill(page, [Step("school--0", "School", "choose", ["Nanyang"]),
                               Step("question_1", "Eligible", "choose", ["Maybe"])], tmp_path / "x.pdf")
@@ -437,3 +462,68 @@ def test_a_submit_by_script_is_not_refused_for_the_browsers_own_checks(page) -> 
     page.set_content(SCRIPTED)
     assert fill.empty_required(page) == []
     assert fill.submit(page, fill.BOARDS["greenhouse"], wait_s=4).outcome == "code"
+
+
+def _apply_setup(store, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[int, list]:  # noqa: ANN001
+    """A Greenhouse posting with a drafted form, and `trawl apply` pointed at the stand-in form in a
+    headless browser; returns the posting id and the browser contexts it opens."""
+    pytest.importorskip("playwright.sync_api")
+    from trawl import apply
+    from trawl.models import Posting
+
+    contexts: list = []
+
+    def headless(pw, profile_dir: Path):  # noqa: ANN001, ANN202
+        try:
+            ctx = pw.chromium.launch_persistent_context(str(profile_dir), headless=True)
+        except Exception as e:  # noqa: BLE001
+            pytest.skip(f"no browser for Playwright: {e}")
+        contexts.append(ctx)
+        return ctx
+
+    monkeypatch.setattr(fill, "launch", headless)
+    monkeypatch.setattr(fill, "form_url", lambda *_: (FIXTURES / "greenhouse_form.html").as_uri())
+    monkeypatch.setattr(apply, "HOME", tmp_path)
+    store.upsert([Posting("greenhouse", "1", "Example", "FDE", "https://example.com/1", "Singapore", None,
+                          facts={"board": "example"})])
+    pid = store.conn.execute("SELECT id FROM postings").fetchone()["id"]
+    answers = [a for a in ANSWERS if a["question"]["id"] in ("first_name", "email", "question_1",
+                                                             "question_2[]")]
+    store.save_application(pid, "h", {}, "tex", b"%PDF-1.4\n", answers)
+    return pid, contexts
+
+
+def test_apply_notices_a_form_submitted_in_the_browser(store, tmp_path: Path,  # noqa: ANN001
+                                                       monkeypatch: pytest.MonkeyPatch) -> None:
+    from trawl import apply
+
+    pid, contexts = _apply_setup(store, tmp_path, monkeypatch)
+
+    def ask(_: str) -> str:  # the person ticks the consent and clicks Submit themselves, then Enter
+        page = contexts[0].pages[0]
+        page.locator("#consent").check()
+        page.locator('button[type="submit"]').click()
+        return ""
+
+    assert apply.run(store, Settings(browser_profile=tmp_path / "b"), pid, PROFILE, ask=ask,
+                     say=lambda _: None) == "submitted"
+    assert store.submitted(pid)
+    assert store.audit(pid)[-1]["detail"]["via"] == "the browser"
+
+
+@pytest.mark.parametrize(("reply", "submitted"), [("y", True), ("", False)])
+def test_apply_asks_when_the_browser_is_closed(store, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,  # noqa: ANN001
+                                               reply: str, submitted: bool) -> None:
+    from trawl import apply
+
+    pid, contexts = _apply_setup(store, tmp_path, monkeypatch)
+    replies = iter(["submit", reply])
+
+    def ask(_: str) -> str:
+        if contexts[0].pages:
+            contexts[0].pages[0].close()  # the person closes the window
+        return next(replies)
+
+    got = apply.run(store, Settings(browser_profile=tmp_path / "b"), pid, PROFILE, ask=ask,
+                    say=lambda _: None)
+    assert (got, store.submitted(pid)) == ("submitted" if submitted else "stopped", submitted)

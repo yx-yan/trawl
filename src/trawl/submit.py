@@ -8,7 +8,8 @@ résumé, questions that wait for you) is listed as left for the person, who fin
 browser before approving it.
 
 Greenhouse's form page shows a few fields its API doesn't list (the phone's country, the city
-picker, school and degree); `EXTRAS` fills those from the profile when the page has them.
+picker, school, degree and discipline, and a second education entry behind "Add another");
+`EXTRAS` fills those from the profile when the page has them.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ class Step:
     value: str | list[str]
     secret: bool = False  # from the profile: never logged or printed
     optional: bool = False  # a field the page may not have (EXTRAS)
+    opens: str = ""  # a button that adds the field to the page, clicked when it isn't there yet
 
     def shown(self) -> str:
         if self.secret:
@@ -55,9 +57,15 @@ class Plan:
 # The API's "location" question is a city picker on the page
 DOM_IDS = {"location": "candidate-location"}
 COMBOBOXES = {"candidate-location"}
-# Fields only the page has: (element id, label, profile field)
+# Fields only the page has: (element id, label, profile field). The second education entry appears
+# after "Add another".
 EXTRAS = [("country", "Phone country", "country"), ("candidate-location", "Location (City)", "city"),
-          ("school--0", "School", "university"), ("degree--0", "Degree", "degree")]
+          ("school--0", "School", "university"), ("degree--0", "Degree", "degree"),
+          ("discipline--0", "Discipline", "major"),
+          ("school--1", "Earlier school", "previous_university"),
+          ("degree--1", "Earlier degree", "previous_degree"),
+          ("discipline--1", "Earlier discipline", "previous_major")]
+PUBLIC = {"university", "previous_university"}  # shown when planning; the rest print as ‹profile›
 
 
 def dom_id(question_id: str) -> str:
@@ -89,10 +97,11 @@ def plan(answers: list[dict], profile: Profile | None, source: str = "greenhouse
     have = {s.field for s in steps}
     for field, label, key in EXTRAS if gh else []:
         v = value(profile, key) if profile else None
-        if key == "degree" and isinstance(v, str):
+        if key in ("degree", "previous_degree") and isinstance(v, str):
             v = degree_level(v)
         if field not in have and isinstance(v, str) and v:
-            steps.append(Step(field, label, "choose", [v], secret=key != "university", optional=True))
+            steps.append(Step(field, label, "choose", [v], secret=key not in PUBLIC, optional=True,
+                              opens="Add another" if field == "school--1" else ""))
     return Plan(steps, left)
 
 

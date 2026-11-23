@@ -39,7 +39,12 @@ class Profile(BaseModel):
     country: str | None = Field(None, description="Country of residence")
     university: str | None = None
     degree: str | None = None
+    major: str | None = None
     graduation: str | None = Field(None, description="YYYY-MM")
+    previous_university: str | None = Field(None, description="An earlier degree, e.g. your bachelor's")
+    previous_degree: str | None = None
+    previous_major: str | None = None
+    previous_graduation: str | None = Field(None, description="YYYY-MM")
     gpa: str | None = None
     start_date: str | None = Field(None, description="Earliest full-time start, YYYY-MM")
     authorized_to_work: bool | None = Field(None, description="Already allowed to work in the job's country")
