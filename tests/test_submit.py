@@ -12,7 +12,7 @@ from trawl import fill
 from trawl.apply import ApplyError, resume_name, run
 from trawl.config import Settings
 from trawl.profile import Profile
-from trawl.submit import Step, degree_level, dom_id, match_option, plan
+from trawl.submit import Step, consent_kind, degree_level, dom_id, match_option, plan
 
 FIXTURES = Path(__file__).parent / "fixtures"
 PROFILE = Profile(legal_first_name="Ada", legal_last_name="Lovelace", email="ada@example.com",
@@ -211,6 +211,9 @@ class FakeStore:
 
     def submitted_since(self, _: int) -> int:
         return self.today
+
+    def log(self, *_: object, **__: object) -> None:
+        pass
 
 
 @pytest.mark.parametrize(("store", "message"), [
@@ -527,3 +530,67 @@ def test_apply_asks_when_the_browser_is_closed(store, tmp_path: Path, monkeypatc
     got = apply.run(store, Settings(browser_profile=tmp_path / "b"), pid, PROFILE, ask=ask,
                     say=lambda _: None)
     assert (got, store.submitted(pid)) == ("submitted" if submitted else "stopped", submitted)
+
+
+
+# --- consents the profile gives, by kind; GPA --------------------------------------------------------
+
+METAVIEW = ("We use Metaview, an AI notetaking tool, to streamline interviews by recording and summarizing "
+            "discussions. Can Metaview transcribe all your interviews?")
+TRUTH = "I confirm that the information I provide is true, complete, and reflects my own experience."
+PRIVACY = "By submitting, I acknowledge my personal data will be processed per the Privacy Policy."
+GDPR = "By checking this box, I consent to Stripe collecting, storing, and processing my responses."
+
+
+@pytest.mark.parametrize(("label", "kind"), [
+    (METAVIEW, "recording"), (TRUTH, "truthful"), (PRIVACY, "privacy"), (GDPR, "privacy"),
+    ("I agree to the terms of service", None), ("Are you authorized to work in Singapore?", None),
+])
+def test_consent_kind(label: str, kind: str | None) -> None:
+    assert (consent_kind(label) or (None,))[0] == kind
+
+
+CONSENT_ANSWERS = [
+    ans("metaview", METAVIEW, "needs_you", note="a consent: yours to give", type_="select",
+        options=["Yes", "No"]),
+    ans("truth", TRUTH, "needs_you", note="a consent: yours to give", type_="multi_select"),
+    ans("privacy", PRIVACY, "needs_you", note="a consent: yours to give", type_="boolean"),
+    ans("terms", "I agree to the terms of service", "needs_you", note="a consent: yours to give",
+        type_="boolean"),
+]
+
+
+def test_plan_gives_only_the_consents_the_profile_gives() -> None:
+    prof = PROFILE.model_copy(update={"agree_privacy": True, "agree_truthful": True, "agree_recording": True})
+    pl = plan(CONSENT_ANSWERS, prof, "ashby")
+    steps = {s.field: s for s in pl.steps}
+    assert steps["metaview"] == Step("metaview", METAVIEW, "pick", ["Yes"])
+    assert steps["truth"].kind == "tick" and steps["privacy"].kind == "tick"
+    assert pl.consents == [METAVIEW, TRUTH, PRIVACY]
+    assert pl.left == ["I agree to the terms of service (a consent: yours to give)"]
+
+    none = plan(CONSENT_ANSWERS, PROFILE, "ashby")  # no agree_* set: every consent waits for you
+    assert none.steps == [] and none.consents == [] and len(none.left) == 4
+    only = plan(CONSENT_ANSWERS, PROFILE.model_copy(update={"agree_privacy": True}), "ashby")
+    assert only.consents == [PRIVACY]
+
+
+def test_ashby_ticks_a_consent_the_profile_gives(ashby_page, tmp_path: Path) -> None:  # noqa: ANN001
+    truth = ans("consent", "I confirm the information is true", "needs_you", note="a consent: yours to give",
+                type_="multi_select")
+    steps = plan([truth], PROFILE.model_copy(update={"agree_truthful": True}), "ashby").steps
+    assert fill.fill(ashby_page, steps, tmp_path / "x.pdf").failed == []
+    assert ashby_page.locator('[id="f1_consent-labeled-checkbox-0"]').is_checked()
+
+
+def test_page_only_consents_are_ticked_by_kind(page) -> None:  # noqa: ANN001
+    assert fill.tick_consents(page, {"truthful"}) == []  # the stand-in's box is about data
+    assert not page.locator("#consent").is_checked()
+    assert fill.tick_consents(page, {"privacy"}) == [("privacy", "I consent to Example processing my data")]
+    assert page.locator("#consent").is_checked()
+
+
+def test_apply_skips_a_form_that_requires_a_gpa() -> None:
+    gpa = ans("gpa", "What is your GPA?", "needs_you", note="not in your profile: gpa", type_="number")
+    with pytest.raises(ApplyError, match="requires a GPA"):
+        run(FakeStore(app=FakeApp(answers=[gpa])), Settings(), 7, PROFILE)  # type: ignore[arg-type]

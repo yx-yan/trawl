@@ -29,7 +29,7 @@ from .config import HOME, Settings
 from .forms import board_from_url
 from .profile import Profile
 from .store import Store
-from .submit import plan
+from .submit import CONSENTS, plan
 
 
 class ApplyError(Exception):
@@ -66,6 +66,12 @@ def run(store: Store, settings: Settings, posting_id: int, profile: Profile | No
         raise ApplyError(f"{n} applications submitted in the last 24 hours, the limit "
                          f"(TRAWL_SUBMIT_DAILY_LIMIT={settings.submit_daily_limit})")
 
+    asks_gpa = any(a["question"]["required"] and a.get("note") == "not in your profile: gpa"
+                   for a in app.answers)
+    if asks_gpa and not (profile and profile.gpa):
+        store.log(posting_id, "skipped", reason="requires a GPA")
+        raise ApplyError(f"#{posting_id} {p.company}: the form requires a GPA, which your profile leaves "
+                         "empty: skipped")
     pl = plan(app.answers, profile, p.source)
     say(f"#{posting_id} {p.company}: {p.title}")
     for s in pl.steps:
@@ -84,6 +90,12 @@ def run(store: Store, settings: Settings, posting_id: int, profile: Profile | No
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
             page.goto(fill.form_url(p.source, board_name, p.external_id), wait_until="networkidle")
             filled = fill.fill(page, pl.steps, resume)
+            allowed = {kind for kind, key, _ in CONSENTS if profile and getattr(profile, key) is True}
+            ticked = fill.tick_consents(page, allowed)
+            consents = [c[:80] for c in pl.consents + [text for _, text in ticked]]
+            if consents:
+                store.log(posting_id, "consented", labels=consents)
+                say("Consents given from your profile:\n" + "\n".join(f"  ✓ {c}" for c in consents))
             store.log(posting_id, "filled", done=len(filled.done), failed=filled.failed, left=pl.left)
             todo = pl.left + filled.failed
             # required fields only the page has (a consent box, say), which no answer covered

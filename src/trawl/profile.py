@@ -55,6 +55,11 @@ class Profile(BaseModel):
     salary_expectation: str | None = None
     notice_period: str | None = None
     offer_deadline: str | None = Field(None, description="Any offer or process deadline; 'No' if none")
+    # Consents trawl may give for you, by kind; anything else waits for you. You still look over
+    # every form before it's submitted, and the audit log names each consent trawl gave.
+    agree_privacy: bool | None = Field(None, description="Tick privacy and data-processing acknowledgements")
+    agree_truthful: bool | None = Field(None, description="Tick 'the information I give is true'")
+    agree_recording: bool | None = Field(None, description="Agree to AI notetakers recording interviews")
     gender: str | None = Field(None, description="Empty: decline to self-identify")
     race: str | None = None
     veteran: str | None = None
