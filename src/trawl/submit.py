@@ -15,13 +15,13 @@ picker, school, degree and discipline, and a second education entry behind "Add 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from .answer import _norm, pick
 from .profile import Profile, value
 
-Kind = Literal["text", "choose", "check", "pick", "file"]
+Kind = Literal["text", "choose", "check", "pick", "tick", "file"]
 
 
 @dataclass
@@ -29,7 +29,7 @@ class Step:
     field: str  # the element's id on the page (for "check": the checkbox group's name)
     label: str
     kind: Kind  # type text, choose in a combobox, tick checkboxes (Greenhouse), pick labelled
-    # radios or checkboxes (Ashby), attach a file
+    # radios or checkboxes (Ashby), tick a lone consent checkbox, attach a file
     value: str | list[str]
     secret: bool = False  # from the profile: never logged or printed
     optional: bool = False  # a field the page may not have (EXTRAS)
@@ -47,11 +47,12 @@ class Step:
 class Plan:
     steps: list[Step]
     left: list[str]  # labels of what the person fills in the browser
+    consents: list[str] = field(default_factory=list)  # labels of consents given from the profile
 
     def log(self) -> dict:
         """What the audit log keeps: which fields, never their values."""
         return {"steps": [{"field": s.field, "kind": s.kind, "secret": s.secret} for s in self.steps],
-                "left": self.left}
+                "left": self.left, "consents": self.consents}
 
 
 # The API's "location" question is a city picker on the page
@@ -79,8 +80,12 @@ def plan(answers: list[dict], profile: Profile | None, source: str = "greenhouse
     gh = source == "greenhouse"
     steps: list[Step] = []
     left: list[str] = []
+    consents: list[str] = []
     for a in answers:
         a = refill(a, profile)
+        if (given := consent(a, profile)) is not a:
+            consents.append(a["question"]["label"])
+            a = given
         q = a["question"]
         field, label = dom_id(q["id"]) if gh else q["id"], q["label"]
         status, v = a["status"], a["value"]
@@ -102,10 +107,51 @@ def plan(answers: list[dict], profile: Profile | None, source: str = "greenhouse
         if field not in have and isinstance(v, str) and v:
             steps.append(Step(field, label, "choose", [v], secret=key not in PUBLIC, optional=True,
                               opens="Add another" if field == "school--1" else ""))
-    return Plan(steps, left)
+    return Plan(steps, left, consents)
 
 
 _MISSING = re.compile(r"(?:not in your profile|no option matches your): (\w+)")
+
+
+# Kinds of consent, tried in this order: an AI notetaker's notice also mentions data
+CONSENTS = [
+    ("recording", "agree_recording",
+     re.compile(r"\b(record(ing|ed)?|notetak\w*|transcri\w*)\b.*\binterview|"
+                r"\binterview\w*\b.*\b(record|notetak|transcri)", re.I | re.S)),
+    ("truthful", "agree_truthful",
+     re.compile(r"\b(information|statements?|answers?|application)\b.*"
+                r"\b(true|accurate|complete|truthful)\b", re.I | re.S)),
+    ("privacy", "agree_privacy",
+     re.compile(r"privacy (policy|notice)|personal (data|information)|\bgdpr\b|"
+                r"(collect|stor|process)\w*\b.*\b(data|responses|information)", re.I | re.S)),
+]
+
+
+def consent_kind(label: str) -> tuple[str, str] | None:
+    """Which kind of consent a label asks for, and the profile field that may give it."""
+    for kind, key, pattern in CONSENTS:
+        if pattern.search(label):
+            return kind, key
+    return None
+
+
+_YES = re.compile(r"^(yes|i agree|i consent|i accept|agree|accept)\b", re.I)
+
+
+def consent(a: dict, profile: Profile | None) -> dict:
+    """A consent the profile gives for its kind, answered; any other stays with the person."""
+    if a["status"] != "needs_you" or not (a.get("note") or "").startswith("a consent") or profile is None:
+        return a
+    found = consent_kind(a["question"]["label"])
+    if not found or getattr(profile, found[1]) is not True:
+        return a
+    q, kind = a["question"], found[0]
+    if q["type"] in ("select", "multi_select") and any(o.strip() for o in q["options"]):
+        yes = [o for o in q["options"] if _YES.match(o.strip())]
+        if len(yes) != 1:
+            return a
+        return a | {"status": "filled", "value": yes, "source": f"consent:{kind}", "note": ""}
+    return a | {"status": "filled", "value": True, "source": f"consent:{kind}", "note": ""}
 
 
 def refill(a: dict, profile: Profile | None) -> dict:
@@ -136,6 +182,8 @@ def _filled(field: str, label: str, a: dict, profile: Profile | None, gh: bool) 
         if not gh:
             return Step(field, label, "pick", v)
         return Step(field, label, "check" if field.endswith("[]") else "choose", v)
+    if a["source"].startswith("consent:") and v is True:  # a lone checkbox the profile agrees to
+        return Step(field, label, "tick", "")
     if isinstance(v, bool):  # Ashby's yes/no questions
         return None if gh else Step(field, label, "pick", ["Yes" if v else "No"])
     if v is None:  # a text field filled from the profile, now

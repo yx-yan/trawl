@@ -152,9 +152,11 @@ candidate's own signed-in profile, so there is no form to draft.
 - **The profile is encrypted, with its key kept apart.** Fernet, key in the trawl checkout's `.env`,
   file in `~/.trawl`; `trawl profile edit` decrypts into a private temporary file for the editor.
   `trawl profile show` lists which fields are set, never their values.
-- **Consents are never given by trawl.** "I confirm the information is true", privacy notices and
+- **Consents are the person's.** "I confirm the information is true", privacy notices and
   "we record interviews with an AI notetaker" wait for the person, whatever the model says: a
-  pattern on the label overrides it.
+  pattern on the label overrides it. When filling (section 12), trawl gives only the kinds the person
+  has opted into in their profile (`agree_privacy`, `agree_truthful`, `agree_recording`); any other
+  consent, such as terms of service, still waits.
 - **Demographic questions come only from the profile**, or the "decline" option.
 - **Drafts are checked like bullets.** A number or name in neither the résumé nor the posting is
   flagged on the draft (the draft can't be put back the way a bullet can). Acronyms of names in
@@ -188,7 +190,12 @@ candidate's own signed-in profile, so there is no form to draft.
 - **Approval is of the filled form.** Typing `submit` is refused while a required field is empty
   (react-select leaves its input empty after a choice, so a combobox counts as filled when its
   control shows one). Then trawl hashes every field's content, screenshots the page and only then
-  clicks Submit. Consents stay the person's to tick in the page.
+  clicks Submit. Consents are ticked only for the kinds the profile opts into, including boxes only
+  the page shows (Greenhouse's GDPR box turns required once a demographic question is answered, so
+  trawl looks for them after filling). The person sees them ticked before approving, and the audit
+  log names each one.
+- **A required GPA means skip.** If the form requires a GPA and the profile has none, `trawl apply`
+  refuses before opening a browser and logs the skip.
 - **What happened is read from what changed.** The form page can carry the job description, whose
   "thank you for your interest" proves nothing; a submission is confirmed only when the form is gone
   or the page moved to a confirmation. New error messages mean the form refused it. The browser's

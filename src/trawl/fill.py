@@ -58,7 +58,7 @@ class Filled:
 def fill(page: Page, steps: list[Step], resume: Path) -> Filled:
     out = Filled()
     for s in steps:
-        el = page.locator(f'[id="{s.field}"]') if s.kind not in ("check", "pick") else None
+        el = page.locator(f'[id="{s.field}"]') if s.kind not in ("check", "pick", "tick") else None
         if el is not None and el.count() == 0 and s.opens:  # e.g. a second education entry
             button = page.get_by_role("button", name=s.opens)
             if button.count():
@@ -97,6 +97,12 @@ def _step(page: Page, s: Step, resume: Path) -> str | None:
             if i is None:
                 return "no box matches: tick it yourself"
             boxes.nth(i).check()
+    elif s.kind == "tick":  # a lone consent checkbox: Greenhouse by its id, Ashby by its field
+        box = page.locator(f'input[type="checkbox"][id="{s.field}"], '
+                           f'input[type="checkbox"][id*="_{s.field}-labeled-checkbox-"]')
+        if box.count() != 1:
+            return "not a single checkbox: tick it yourself"
+        box.first.check()
     elif s.kind == "pick":  # Ashby: radio buttons or checkboxes, one labelled input per option
         inputs = page.locator(f'input[id*="_{s.field}-labeled-"]')
         if inputs.count() == 0:
@@ -253,6 +259,30 @@ def outcome(before: dict, now: dict) -> Result:
     if new:
         return Result("errors", new)
     return Result("pending")
+
+
+# Required checkboxes still unticked, with their labels: consents only the page shows (Greenhouse's
+# GDPR box isn't in its API)
+UNTICKED_JS = """() => [...document.querySelectorAll('input[type=checkbox]')]
+  .filter(e => !e.checked && (e.required || e.getAttribute('aria-required') === 'true'))
+  .filter(e => !(e.name && document.querySelectorAll(`input[name="${CSS.escape(e.name)}"]`).length > 1))
+  .map(e => [e.id, (e.labels && e.labels[0] ? e.labels[0].innerText : '')
+    .replace(/\\s+/g, ' ').replace(/\\*$/, '').trim()])
+  .filter(([id, text]) => id && text)"""
+
+
+def tick_consents(page: Page, allowed: set[str]) -> list[tuple[str, str]]:
+    """Tick the page's required lone checkboxes whose consent kind the profile gives; returns
+    (kind, label) for each one ticked."""
+    from .submit import consent_kind
+
+    ticked = []
+    for box_id, text in page.evaluate(UNTICKED_JS):
+        found = consent_kind(text)
+        if found and found[0] in allowed:
+            page.locator(f'[id="{box_id}"]').check()
+            ticked.append((found[0], text))
+    return ticked
 
 
 def empty_required(page: Page) -> list[str]:
