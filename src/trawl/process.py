@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 import httpx
 
 from . import answer, forms
-from .connectors import mcf
+from .connectors import DESCRIBE
 from .decide import Criteria, Verdict, decide, prefilter
 from .extract import Client, JobFacts, Usage, extract_with_retry, with_retry
 from .match import RISE, match
@@ -76,9 +76,9 @@ def process(store: Store, criteria: Criteria, http: httpx.Client, client: Client
 
     left = reject_by_rules(store.pending())
 
-    # 2. details for MyCareersFuture postings, which arrive without a description
-    bare = [p for p in left if p.source == "mcf" and not p.description]
-    for p, result in _parallel(lambda p: mcf.describe(http, p.external_id), bare):
+    # 2. details for boards whose lists have no descriptions (MyCareersFuture, Workday, SmartRecruiters)
+    bare = [p for p in left if p.source in DESCRIBE and not p.description]
+    for p, result in _parallel(lambda p: DESCRIBE[p.source](http, p.external_id, p.facts), bare):
         if isinstance(result, Exception):
             stats.failed.append(f"{p.company}: {p.title}: detail: {result}")
             left.remove(p)

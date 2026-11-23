@@ -12,7 +12,8 @@ const FILTERS = {
                                    || (!j.open && (j.status === "new" || j.status === "prepared")) },
   all: { label: "All", test: () => true },
 };
-const BOARDS = { greenhouse: "Greenhouse", ashby: "Ashby", lever: "Lever", mcf: "MyCareersFuture" };
+const BOARDS = { greenhouse: "Greenhouse", ashby: "Ashby", lever: "Lever", workday: "Workday",
+                 smartrecruiters: "SmartRecruiters", mcf: "MyCareersFuture" };
 
 const state = { jobs: [], filter: "todo", source: "", q: "", selected: null, following: {}, last: {} };
 const $main = document.getElementById("main");
