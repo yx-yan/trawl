@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from .answer import _norm
+from .answer import _norm, pick
 from .profile import Profile, value
 
 Kind = Literal["text", "choose", "check", "pick", "file"]
@@ -72,6 +72,7 @@ def plan(answers: list[dict], profile: Profile | None, source: str = "greenhouse
     steps: list[Step] = []
     left: list[str] = []
     for a in answers:
+        a = refill(a, profile)
         q = a["question"]
         field, label = dom_id(q["id"]) if gh else q["id"], q["label"]
         status, v = a["status"], a["value"]
@@ -93,6 +94,27 @@ def plan(answers: list[dict], profile: Profile | None, source: str = "greenhouse
         if field not in have and isinstance(v, str) and v:
             steps.append(Step(field, label, "choose", [v], secret=key != "university", optional=True))
     return Plan(steps, left)
+
+
+_MISSING = re.compile(r"(?:not in your profile|no option matches your): (\w+)")
+
+
+def refill(a: dict, profile: Profile | None) -> dict:
+    """A question that waited for a profile field when it was drafted, answered from the profile as
+    it is now: filling in the profile helps the forms already drafted, without a model call."""
+    m = _MISSING.fullmatch(a.get("note") or "") if a["status"] == "needs_you" else None
+    v = value(profile, m.group(1)) if m and profile else None
+    if v is None or v == "":
+        return a
+    q, key = a["question"], m.group(1)
+    if q["type"] in ("select", "multi_select"):
+        chosen = pick(q["options"], v)
+        return a | {"status": "filled", "value": chosen, "source": key, "note": ""} if chosen else a
+    if q["type"] == "boolean":
+        return a | {"status": "filled", "value": bool(v), "source": key, "note": ""}
+    if isinstance(v, bool):
+        return a
+    return a | {"status": "filled", "value": None, "source": key, "note": ""}  # text: read when filling
 
 
 def _filled(field: str, label: str, a: dict, profile: Profile | None, gh: bool) -> Step | None:
