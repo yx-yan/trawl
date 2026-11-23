@@ -203,4 +203,6 @@ candidate's own signed-in profile, so there is no form to draft.
 Ashby's form carries an invisible reCAPTCHA Enterprise check, one more reason it runs in the
 person's own Chrome and not on a server.
 
-Not yet: approving from Telegram (the form can only be approved where the browser is), Lever's form.
+Approval stays in the terminal next to the browser, not in Telegram: the form is approved where it
+can be seen, and a phone approval would need a process waiting on the Mac to click Submit. Lever's
+form isn't filled yet; its questions are only in the apply page's HTML.
