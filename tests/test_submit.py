@@ -183,7 +183,7 @@ class FakeStore:
 
 @pytest.mark.parametrize(("store", "message"), [
     (FakeStore(p=None), "no such posting"),
-    (FakeStore(p=FakePosting(source="lever")), "Greenhouse forms only"),
+    (FakeStore(p=FakePosting(source="lever")), "Greenhouse and Ashby forms only"),
     (FakeStore(done=True), "already submitted"),
     (FakeStore(app=None), "trawl tailor 7"),
     (FakeStore(app=FakeApp(answers=None)), "trawl tailor 7"),
@@ -242,17 +242,17 @@ def test_fill_then_submit_once_the_person_has_consented(page, tmp_path: Path) ->
     assert fill.empty_required(page) == ["I consent to Example processing my data"]
     state = fill.form_state(page)
     assert ["question_1", ["Yes, I am eligible"]] in state
-    got = fill.submit(page, wait_s=3)
+    got = fill.submit(page, fill.BOARDS["greenhouse"], wait_s=3)
     assert (got.outcome, got.errors) == ("errors", ["Please consent to continue"])
 
     page.locator("#consent").check()
     assert fill.empty_required(page) == []
     # the browser's own check stops Submit without a message on the page; trawl still says why
     page.locator("#email").fill("not an email")
-    got = fill.submit(page, wait_s=3)
+    got = fill.submit(page, fill.BOARDS["greenhouse"], wait_s=3)
     assert got.outcome == "errors" and got.errors[0].startswith("Email: ")
     page.locator("#email").fill("ada@example.com")
-    assert fill.submit(page, wait_s=3).outcome == "confirmed"
+    assert fill.submit(page, fill.BOARDS["greenhouse"], wait_s=3).outcome == "confirmed"
 
 
 def test_a_choice_no_option_matches_is_left_to_you(page, tmp_path: Path) -> None:  # noqa: ANN001
@@ -335,3 +335,69 @@ def test_apply_end_to_end_against_the_stand_in_form(store, tmp_path: Path,  # no
     assert "Ada" not in log and "ada@example.com" not in log
     shots = sorted(p.name.split("-")[0] for p in (tmp_path / "applications").glob("*/*.png"))
     assert shots == ["approved", "submitted"]
+
+
+# --- Ashby -------------------------------------------------------------------------------------------
+
+ASHBY = [
+    ans("_systemfield_name", "Name", "filled", None, "preferred_name"),
+    ans("_systemfield_resume", "Resume", "filled", "tailored résumé PDF", "resume", type_="file"),
+    ans("auth", "Are you authorized to work in Singapore?", "filled", ["No"], "authorized_to_work",
+        type_="select"),
+    ans("season", "Graduation season?", "filled", ["May - July 2027"], "graduation", type_="select"),
+    ans("why", "Why us?", "drafted", "Because of the work.", "draft", type_="long_text"),
+    ans("relocate", "Will you relocate?", "filled", True, "relocate", type_="boolean"),
+    ans("consent", "I confirm the information is true", "needs_you", note="a consent: yours to give",
+        type_="multi_select"),
+]
+
+
+def test_ashby_plan_picks_labelled_options_and_adds_no_greenhouse_fields() -> None:
+    pl = plan(ASHBY, PROFILE.model_copy(update={"preferred_name": "Ada L"}), "ashby")
+    steps = {s.field: s for s in pl.steps}
+    assert steps["auth"] == Step("auth", "Are you authorized to work in Singapore?", "pick", ["No"])
+    assert steps["relocate"].value == ["Yes"]
+    assert steps["_systemfield_name"].secret
+    assert not any(s.optional for s in pl.steps)  # no phone country, school or degree pickers
+    assert pl.left == ["I confirm the information is true (a consent: yours to give)"]
+
+
+@pytest.fixture
+def ashby_page():  # noqa: ANN201
+    sync_api = pytest.importorskip("playwright.sync_api")
+    with sync_api.sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch()
+        except Exception as e:  # noqa: BLE001
+            pytest.skip(f"no browser for Playwright: {e}")
+        pg = browser.new_page()
+        pg.set_content((FIXTURES / "ashby_form.html").read_text())
+        yield pg
+        browser.close()
+
+
+def test_ashby_fill_then_submit_with_the_real_button(ashby_page, tmp_path: Path) -> None:  # noqa: ANN001
+    page = ashby_page
+    resume = tmp_path / "Resume.pdf"
+    resume.write_bytes(b"%PDF-1.4\n")
+    steps = plan(ASHBY, PROFILE.model_copy(update={"preferred_name": "Ada L"}), "ashby").steps
+    filled = fill.fill(page, steps, resume)
+    assert filled.failed == ["Will you relocate? (not on the page)"]
+    assert page.locator("#_systemfield_name").input_value() == "Ada L"
+    assert page.locator('[id="f1_auth-labeled-radio-1"]').is_checked()
+    assert page.locator('[id="f1_season-labeled-radio-1"]').is_checked()
+    assert page.locator("#why").input_value() == "Because of the work."
+
+    assert fill.empty_required(page) == ["I confirm the information is true"]
+    board = fill.BOARDS["ashby"]
+    got = fill.submit(page, board, wait_s=3)
+    assert (got.outcome, got.errors) == ("errors", ["Missing entry for required field"])
+    page.locator('[id="f1_consent-labeled-checkbox-0"]').check()
+    assert fill.empty_required(page) == []
+    assert fill.submit(page, board, wait_s=3).outcome == "confirmed"
+    assert not page.evaluate("window.wrong === true")  # never an upload button
+
+
+def test_ashby_empty_required_sees_radios_and_files(ashby_page) -> None:  # noqa: ANN001
+    assert fill.empty_required(ashby_page) == ["Name", "Resume", "Are you authorized to work in Singapore?",
+                                               "Graduation season?", "I confirm the information is true"]

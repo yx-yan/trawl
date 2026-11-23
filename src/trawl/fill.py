@@ -1,13 +1,17 @@
-"""Fill a Greenhouse application form in a real browser, and submit it once the person says so.
+"""Fill a Greenhouse or Ashby application form in a real browser, and submit it once the person says so.
 
 This runs on the person's own machine, in a visible Chrome window, so they can watch, finish what
 trawl leaves (consents, files, questions only they can answer) and solve any challenge the page
 puts up: trawl never tries to get around one. Playwright is an optional dependency
 (`pip install -e ".[apply]"`), so the server that collects jobs doesn't need a browser.
 
-Greenhouse's form page (job-boards.greenhouse.io) gives each field the id the API names it by;
-selects are react-select comboboxes whose options appear in a listbox the input points to with
-aria-controls, and multi-selects are checkboxes named `question_x[]`.
+Both boards give each field the id their API names it by.
+- Greenhouse (job-boards.greenhouse.io): selects are react-select comboboxes whose options appear
+  in a listbox the input points to with aria-controls; multi-selects are checkboxes `question_x[]`.
+- Ashby (jobs.ashbyhq.com): selects are radio buttons and multi-selects checkboxes, each with an id
+  `<form>_<field>-labeled-radio-<n>` and a label holding the option; a required field's title label
+  has a `_required_` class. Its page has other `type=submit` buttons (résumé uploads) before the
+  real one, so each board names its Submit button.
 """
 
 from __future__ import annotations
@@ -27,8 +31,22 @@ OPTIONS_TIMEOUT_MS = 6000
 NO_MATCH = "no single option matches: pick it yourself"
 
 
-def form_url(board: str, job_id: str) -> str:
-    return f"https://job-boards.greenhouse.io/embed/job_app?for={board}&token={job_id}"
+@dataclass(frozen=True)
+class Board:
+    url: str  # the form page, from the board's name and the job's id
+    submit: str  # the Submit button
+
+
+BOARDS = {
+    "greenhouse": Board("https://job-boards.greenhouse.io/embed/job_app?for={board}&token={job}",
+                        '#application-form button[type="submit"]'),
+    "ashby": Board("https://jobs.ashbyhq.com/{board}/{job}/application",
+                   "button.ashby-application-form-submit-button"),
+}
+
+
+def form_url(source: str, board: str, job_id: str) -> str:
+    return BOARDS[source].url.format(board=board, job=job_id)
 
 
 @dataclass
@@ -40,7 +58,7 @@ class Filled:
 def fill(page: Page, steps: list[Step], resume: Path) -> Filled:
     out = Filled()
     for s in steps:
-        el = page.locator(f'[id="{s.field}"]') if s.kind != "check" else None
+        el = page.locator(f'[id="{s.field}"]') if s.kind not in ("check", "pick") else None
         if el is not None and el.count() == 0:
             if not s.optional:
                 out.failed.append(f"{s.label} (not on the page)")
@@ -59,7 +77,10 @@ def fill(page: Page, steps: list[Step], resume: Path) -> Filled:
 def _step(page: Page, s: Step, resume: Path) -> str | None:
     """Do one step; the reason it couldn't, or None."""
     if s.kind == "text":
-        page.locator(f'[id="{s.field}"]').fill(str(s.value))
+        el = page.locator(f'[id="{s.field}"]')
+        if el.get_attribute("role") == "combobox":  # Ashby's location: a picker that looks like text
+            return _choose(page, s.field, str(s.value))
+        el.fill(str(s.value))
     elif s.kind == "file":
         page.locator(f'[id="{s.field}"]').set_input_files(str(resume))
     elif s.kind == "check":
@@ -71,6 +92,17 @@ def _step(page: Page, s: Step, resume: Path) -> str | None:
             if i is None:
                 return "no box matches: tick it yourself"
             boxes.nth(i).check()
+    elif s.kind == "pick":  # Ashby: radio buttons or checkboxes, one labelled input per option
+        inputs = page.locator(f'input[id*="_{s.field}-labeled-"]')
+        if inputs.count() == 0:
+            return "not on the page"
+        labels = [inputs.nth(i).evaluate("e => e.labels && e.labels[0] ? e.labels[0].innerText : ''")
+                  for i in range(inputs.count())]
+        for want in s.value:
+            i = match_option(labels, want)
+            if i is None:
+                return NO_MATCH
+            inputs.nth(i).check()
     else:
         for want in s.value:
             if why := _choose(page, s.field, want):
@@ -132,13 +164,27 @@ EMPTY_REQUIRED_JS = """() => {
       out.push(label(e));
     }
   }
-  return out;
+  // Ashby marks the title label of a required field; the field is the label's target, or a group
+  // of labelled radios / checkboxes
+  for (const l of form.querySelectorAll('label[class*="_required_"][for]')) {
+    const el = document.getElementById(l.htmlFor);
+    const text = l.innerText.replace(/\\s+/g, ' ').trim();
+    if (el && el.type === 'file') { if (!el.files.length) out.push(text); continue; }
+    if (el && 'value' in el && el.type !== 'checkbox' && el.type !== 'radio') {
+      if (!el.value.trim()) out.push(text);
+      continue;
+    }
+    const group = form.querySelectorAll(`input[id*="_${CSS.escape(l.htmlFor)}-labeled-"]`);
+    if (group.length && ![...group].some(c => c.checked)) out.push(text);
+  }
+  return [...new Set(out)];
 }"""
 
 # Everything the person is about to approve, to hash: each field and what's in it.
 FORM_STATE_JS = """() => {
   const form = document.querySelector('#application-form') || document;
-  return [...form.querySelectorAll('input, textarea')].filter(e => e.id || e.name).map(e => {
+  return [...form.querySelectorAll('input, textarea')]
+    .filter(e => (e.id || e.name) && !(e.name || '').startsWith('g-recaptcha')).map(e => {
     let v = e.value;
     if (e.type === 'checkbox' || e.type === 'radio') v = e.checked;
     else if (e.type === 'file') v = [...(e.files || [])].map(f => f.name + ':' + f.size).join(',');
@@ -155,14 +201,14 @@ FORM_STATE_JS = """() => {
 # carry the job description, whose "thank you for your interest" means nothing while the form is
 # still there. Greenhouse may email a security code before it accepts an application; the person
 # types that into the page.
-SIGNALS_JS = """() => {
+SIGNALS_JS = """(submit) => {
   const text = document.body.innerText;
-  const button = document.querySelector('#application-form button[type="submit"], button[type="submit"]');
+  const button = document.querySelector(submit);
   return {
     confirmation_url: /confirmation/i.test(location.href),
     form: !!(button && button.offsetParent !== null),
     thanks: /thank you for (applying|your (application|interest))/i.test(text)
-         || /application (has been |was )?(submitted|received)/i.test(text),
+         || /application (has been |was )?(successfully )?(submitted|received)/i.test(text),
     code_input: !!document.querySelector('input[id*="security" i], input[name*="security" i]'),
     code_text: /security code/i.test(text),
     errors: [...new Set([...document.querySelectorAll('[class*="error"], [role="alert"]')]
@@ -203,23 +249,23 @@ def form_state(page: Page) -> list:
     return page.evaluate(FORM_STATE_JS)
 
 
-def signals(page: Page) -> dict:
-    return page.evaluate(SIGNALS_JS)
+def signals(page: Page, board: Board) -> dict:
+    return page.evaluate(SIGNALS_JS, board.submit)
 
 
-def submit(page: Page, wait_s: float = 20) -> Result:
-    before = signals(page)
-    page.locator('#application-form button[type="submit"], button[type="submit"]').first.click()
-    return wait_outcome(page, before, wait_s)
+def submit(page: Page, board: Board, wait_s: float = 20) -> Result:
+    before = signals(page, board)
+    page.locator(board.submit).first.click()
+    return wait_outcome(page, board, before, wait_s)
 
 
-def wait_outcome(page: Page, before: dict, wait_s: float, *,
+def wait_outcome(page: Page, board: Board, before: dict, wait_s: float, *,
                  until: tuple[str, ...] = ("confirmed", "code", "errors")) -> Result:
     deadline = time.monotonic() + wait_s
     result = Result("pending")
     while time.monotonic() < deadline:
         try:
-            result = outcome(before, signals(page))
+            result = outcome(before, signals(page, board))
         except Exception:  # noqa: BLE001 - the page is navigating
             result = Result("pending")
         if result.outcome in until:

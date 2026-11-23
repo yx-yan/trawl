@@ -164,7 +164,7 @@ candidate's own signed-in profile, so there is no form to draft.
 
 ## 12. Submitting: trawl fills, the person approves, trawl clicks
 
-`trawl apply <id>` fills a Greenhouse form in Chrome and submits it when the person types
+`trawl apply <id>` fills a Greenhouse or Ashby form in Chrome and submits it when the person types
 `submit`. It runs on their own machine against the server's database (`deploy.sh tunnel`).
 
 - **No API for candidates.** Greenhouse, Lever and Ashby each have an "apply" endpoint, but it
@@ -174,10 +174,14 @@ candidate's own signed-in profile, so there is no form to draft.
   answer any challenge the page puts up; trawl never tries to get past one. Chrome keeps its own
   profile in `~/.trawl/browser`. The server has no browser and needs none: Playwright is the
   optional `apply` extra.
-- **The page names fields the way the API does.** Greenhouse's form gives each field the id its API
-  lists (`question_68860631`), so the answers drafted from the API (section 11) fill the page
-  directly. Selects are react-select comboboxes; a few fields exist only on the page (phone country,
-  city, school, degree) and are filled from the profile when they're there.
+- **The page names fields the way the API does.** Both boards give each field the id their API
+  lists (`question_68860631`, a UUID path on Ashby), so the answers drafted from the API (section
+  11) fill the page directly. On Greenhouse, selects are react-select comboboxes, and a few fields
+  exist only on the page (phone country, city, school, degree, picked by level: "Master of Science"
+  is "Master's Degree") and are filled from the profile when they're there. On Ashby, every choice
+  is a labelled radio button or checkbox.
+- **Each board names its Submit button.** Ashby's page has résumé-upload buttons of type `submit`
+  before the real one; "the first submit button" would upload instead of apply.
 - **Never the first of several options.** A choice is the exact option, or the only one containing
   the value. Typing "Nanyang" into the school picker lists a polytechnic before the university;
   that is left for the person, not guessed.
@@ -196,5 +200,9 @@ candidate's own signed-in profile, so there is no form to draft.
   `~/.trawl/applications` on the person's machine.
 - **Limits.** One submission per job, and at most `TRAWL_SUBMIT_DAILY_LIMIT` (5) in 24 hours.
 
-Not yet: approving from Telegram (the form can only be approved where the browser is), Ashby's
-form, Lever's.
+Ashby's form carries an invisible reCAPTCHA Enterprise check, one more reason it runs in the
+person's own Chrome and not on a server.
+
+Approval stays in the terminal next to the browser, not in Telegram: the form is approved where it
+can be seen, and a phone approval would need a process waiting on the Mac to click Submit. Lever's
+form isn't filled yet; its questions are only in the apply page's HTML.

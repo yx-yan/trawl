@@ -1,6 +1,6 @@
 """`trawl apply <id>`: fill a job's application form in Chrome, and submit it when the person says so.
 
-1. Checks: a Greenhouse job, a drafted form (`trawl tailor <id>`), not submitted before, and under
+1. Checks: a Greenhouse or Ashby job, a drafted form (`trawl tailor <id>`), not submitted before, and under
    the daily limit.
 2. The plan (`submit.py`) fills what trawl may: drafts, choices, profile fields, the tailored résumé.
    Consents, other files and anything trawl couldn't answer are listed for the person.
@@ -26,6 +26,7 @@ from pathlib import Path
 
 from . import fill
 from .config import HOME, Settings
+from .forms import board_from_url
 from .profile import Profile
 from .store import Store
 from .submit import plan
@@ -51,9 +52,11 @@ def run(store: Store, settings: Settings, posting_id: int, profile: Profile | No
     p = store.posting(posting_id)
     if p is None:
         raise ApplyError(f"#{posting_id}: no such posting")
-    if p.source != "greenhouse" or not p.facts.get("board"):
-        raise ApplyError(f"#{posting_id} is on {p.source}: trawl apply fills Greenhouse forms only, for now. "
-                         f"Apply at {p.url}")
+    board_name = p.facts.get("board") or board_from_url(p.url)
+    if p.source not in fill.BOARDS or not board_name:
+        raise ApplyError(f"#{posting_id} is on {p.source}: trawl apply fills Greenhouse and Ashby forms "
+                         f"only. Apply at {p.url}")
+    board = fill.BOARDS[p.source]
     if store.submitted(posting_id):
         raise ApplyError(f"#{posting_id} {p.company}: already submitted")
     app = store.latest_application(posting_id)
@@ -63,7 +66,7 @@ def run(store: Store, settings: Settings, posting_id: int, profile: Profile | No
         raise ApplyError(f"{n} applications submitted in the last 24 hours, the limit "
                          f"(TRAWL_SUBMIT_DAILY_LIMIT={settings.submit_daily_limit})")
 
-    pl = plan(app.answers, profile)
+    pl = plan(app.answers, profile, p.source)
     say(f"#{posting_id} {p.company}: {p.title}")
     for s in pl.steps:
         say(f"  ✓ {s.label[:70]} → {s.shown()}")
@@ -79,7 +82,7 @@ def run(store: Store, settings: Settings, posting_id: int, profile: Profile | No
         ctx = fill.launch(pw, settings.browser_profile)
         try:
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
-            page.goto(fill.form_url(p.facts["board"], p.external_id), wait_until="networkidle")
+            page.goto(fill.form_url(p.source, board_name, p.external_id), wait_until="networkidle")
             filled = fill.fill(page, pl.steps, resume)
             store.log(posting_id, "filled", done=len(filled.done), failed=filled.failed, left=pl.left)
             todo = pl.left + filled.failed
@@ -92,13 +95,13 @@ def run(store: Store, settings: Settings, posting_id: int, profile: Profile | No
                 ask("\nLook it over in Chrome; nothing will be submitted. Press Enter to close. ")
                 store.log(posting_id, "closed", submit=False)
                 return "filled"
-            return _approve_and_submit(store, posting_id, app.source_hash, page, folder, ask, say)
+            return _approve_and_submit(store, posting_id, app.source_hash, page, board, folder, ask, say)
         finally:
             ctx.close()
 
 
-def _approve_and_submit(store: Store, posting_id: int, source_hash: str, page, folder: Path,  # noqa: ANN001
-                        ask: Callable[[str], str], say: Callable[[str], None]) -> str:
+def _approve_and_submit(store: Store, posting_id: int, source_hash: str, page, board: fill.Board,  # noqa: ANN001
+                        folder: Path, ask: Callable[[str], str], say: Callable[[str], None]) -> str:
     while True:
         reply = ask("\nFinish the form in Chrome and check every field. "
                     "Type 'submit' to send it, or press Enter to stop: ").strip().lower()
@@ -113,12 +116,12 @@ def _approve_and_submit(store: Store, posting_id: int, source_hash: str, page, f
         digest = hashlib.sha256(json.dumps(state, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         shot = _screenshot(page, folder, "approved")
         store.log(posting_id, "approved", form_sha256=digest, fields=len(state), screenshot=str(shot))
-        result = fill.submit(page)
+        result = fill.submit(page, board)
         if result.outcome == "code":
             store.log(posting_id, "security_code")
-            say("Greenhouse emailed you a security code: type it into the page and submit there. "
+            say("The board emailed you a security code: type it into the page and submit there. "
                 "Waiting up to 10 minutes.")
-            result = fill.wait_outcome(page, fill.signals(page), 600, until=("confirmed",))
+            result = fill.wait_outcome(page, board, fill.signals(page, board), 600, until=("confirmed",))
         if result.outcome == "errors":
             store.log(posting_id, "form_errors", errors=result.errors)
             say("The form didn't take it:\n" + "\n".join(f"  • {e}" for e in result.errors))

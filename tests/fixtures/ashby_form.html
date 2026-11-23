@@ -1,0 +1,44 @@
+<!doctype html>
+<!-- A stand-in for jobs.ashbyhq.com's form: fields by the API's paths, selects as labelled radios
+     with ids <form>_<path>-labeled-radio-<n>, a consent checkbox group, required fields marked by a
+     `_required_` class on their title label, and résumé-upload buttons of type=submit before the
+     real Submit, which thanks you only when everything required is there. -->
+<html><body>
+<p>Thank you for your interest in Example.</p>
+<div class="_autofillPane"><input type="file"><button type="submit" onclick="window.wrong = true">Upload file</button></div>
+<form onsubmit="return go(event)">
+  <label class="_heading _required_f7cvd_91" for="_systemfield_name">Name</label>
+  <input id="_systemfield_name" name="_systemfield_name" required>
+  <label class="_heading _required_f7cvd_91" for="_systemfield_resume">Resume</label>
+  <input id="_systemfield_resume" type="file">
+  <button type="submit" onclick="window.wrong = true">Upload File</button>
+  <fieldset>
+    <label class="_heading _required_f7cvd_91" for="auth">Are you authorized to work in Singapore?</label>
+    <input type="radio" id="f1_auth-labeled-radio-0" name="f1_auth"><label for="f1_auth-labeled-radio-0">Yes</label>
+    <input type="radio" id="f1_auth-labeled-radio-1" name="f1_auth"><label for="f1_auth-labeled-radio-1">No</label>
+  </fieldset>
+  <fieldset>
+    <label class="_heading _required_f7cvd_91" for="season">Graduation season?</label>
+    <input type="radio" id="f1_season-labeled-radio-0" name="f1_season"><label for="f1_season-labeled-radio-0">November - December 2026</label>
+    <input type="radio" id="f1_season-labeled-radio-1" name="f1_season"><label for="f1_season-labeled-radio-1">May - July 2027</label>
+  </fieldset>
+  <label class="_heading" for="why">Why us?</label><textarea id="why" name="why"></textarea>
+  <fieldset>
+    <label class="_heading _required_f7cvd_91" for="consent">I confirm the information is true</label>
+    <input type="checkbox" id="f1_consent-labeled-checkbox-0"><label for="f1_consent-labeled-checkbox-0"></label>
+  </fieldset>
+  <button type="submit" class="_submitButton ashby-application-form-submit-button">Submit Application</button>
+</form>
+<script>
+function go(event) {
+  event.preventDefault();
+  if (event.submitter && !event.submitter.classList.contains('ashby-application-form-submit-button')) return false;
+  if (!document.getElementById('f1_consent-labeled-checkbox-0').checked) {
+    document.querySelector('form').insertAdjacentHTML('beforeend', '<p class="_error_x">Missing entry for required field</p>');
+    return false;
+  }
+  document.body.innerHTML = '<h2>Your application was successfully submitted.</h2>';
+  return false;
+}
+</script>
+</body></html>

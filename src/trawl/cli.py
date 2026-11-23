@@ -164,7 +164,7 @@ def main(argv: list[str] | None = None) -> None:
     g = sub.add_parser("gaps", help="skills eligible jobs ask for that the résumé doesn't show")
     g.add_argument("--send", action="store_true", help="send to Telegram instead of printing")
     sub.add_parser("run", help="collect, process, tailor, then digest (what cron runs)")
-    a = sub.add_parser("apply", help="fill a job's form in Chrome; submit once you approve (Greenhouse)")
+    a = sub.add_parser("apply", help="fill a form in Chrome; submit once you approve (Greenhouse, Ashby)")
     a.add_argument("id", type=int, help="the posting id (#id in the digest)")
     a.add_argument("--no-submit", action="store_true", help="fill the form to look at; never submit")
     a.add_argument("--log", action="store_true", help="show this application's audit log instead")
