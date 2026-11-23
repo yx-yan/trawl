@@ -218,7 +218,7 @@ class FakeStore:
 
 @pytest.mark.parametrize(("store", "message"), [
     (FakeStore(p=None), "no such posting"),
-    (FakeStore(p=FakePosting(source="lever")), "Greenhouse and Ashby forms only"),
+    (FakeStore(p=FakePosting(source="mcf")), "Greenhouse, Ashby and Lever forms only"),
     (FakeStore(done=True), "already submitted"),
     (FakeStore(app=None), "trawl tailor 7"),
     (FakeStore(app=FakeApp(answers=None)), "trawl tailor 7"),

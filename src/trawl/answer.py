@@ -140,12 +140,62 @@ def pick(options: list[str], v: str | bool) -> list[str]:
         want = "yes" if v else "no"
         return [o for o in options if _norm(o).split()[:1] == [want]][:1]
     if m := re.fullmatch(r"(\d{4})-(\d{2})", v.strip()):
-        return [o for o in options if _covers(o, int(m.group(1)), int(m.group(2)))][:1]
+        covering = [o for o in options if _covers(o, int(m.group(1)), int(m.group(2)))][:1]
+        return covering or [o for o in options if _norm(o) == m.group(1)][:1]  # options that are years
     nv = _norm(v)
     if exact := [o for o in options if _norm(o) == nv]:
         return exact[:1]
     near = [o for o in options if nv and (nv in _norm(o) or (len(_norm(o)) > 2 and _norm(o) in nv))]
     return near if len(near) == 1 else []
+
+
+COUNTRY_KEYS = ("citizenship", "permanent_residency")
+
+
+def country_answer(options: list[str], label: str, countries: str) -> list[str]:
+    """'Are you a Singapore citizen?' from the profile's countries: Yes only when the question names
+    one of them. An empty value means none, so every such question is No."""
+    names = [c.strip().lower() for c in countries.split(",") if c.strip()]
+    return pick(options, any(re.search(rf"\b{re.escape(c)}\b", label.lower()) for c in names))
+
+
+def country_key(label: str) -> str | None:
+    """The profile field a yes/no question about status in a country asks for."""
+    if re.search(r"\bpermanent resident", label, re.I):
+        return "permanent_residency"
+    if re.search(r"\bcitizen", label, re.I):
+        return "citizenship"
+    return None
+
+
+_SCHOOL = re.compile(r"\b(high|secondary|middle) school\b", re.I)
+
+
+def school_key(label: str, key: str | None) -> str | None:
+    """A question about high school is answered from the high-school fields only, never from a
+    university the model may have reached for."""
+    if not _SCHOOL.search(label):
+        return key
+    year = re.search(r"\b(year|graduat\w*|date)\b", label, re.I)
+    return "high_school_graduation" if year else "high_school"
+
+
+def yes_no(options: list[str]) -> bool:
+    return any(_norm(o).split()[:1] == ["yes"] for o in options) and any(
+        _norm(o).split()[:1] == ["no"] for o in options)
+
+
+def choose(options: list[str], key: str, v: str | bool, label: str, *, multi: bool = False) -> list[str]:
+    """The options a profile value selects for a question, or [] when none does (or several might)."""
+    if key in COUNTRY_KEYS and isinstance(v, str):
+        return country_answer(options, label, v)
+    if multi and isinstance(v, str) and "," in v:  # "English, Mandarin": each one that has an option
+        return [o for part in v.split(",") if part.strip() for o in pick(options, part.strip())]
+    chosen = pick(options, v)
+    if not chosen and key == "how_heard" and isinstance(v, str) and "website" in v.lower():
+        site = [o for o in options if "website" in o.lower() or "careers" in o.lower()]  # "Palantir Website"
+        chosen = site if len(site) == 1 else []
+    return chosen
 
 
 def resolve(questions: list[Question], replies: Replies, profile: Profile | None, *,
@@ -163,7 +213,11 @@ def _resolve_one(q: Question, r: Reply, profile: Profile | None, facts: str) -> 
     def wait(note: str) -> Answer:
         return Answer(q, "needs_you" if q.required else "skipped", note=note)
 
-    key = r.profile_key
+    key, kind = r.profile_key, r.kind
+    if q.type in ("select", "multi_select") and yes_no(q.options) and (found := country_key(q.label)):
+        key, kind = found, "profile"  # decided by the question's words, whatever the model said
+    if (school := school_key(q.label, key)) != key:
+        key, kind = school, "profile"
     if q.demographic or key in EEO:
         key = key if key in EEO else None
         v = value(profile, key) if profile and key else None
@@ -171,29 +225,31 @@ def _resolve_one(q: Question, r: Reply, profile: Profile | None, facts: str) -> 
         if chosen:
             return Answer(q, "filled", chosen, key or "declined")
         return wait("voluntary: answer it yourself if you want")
-    if r.kind == "consent" or (q.type in ("boolean", "multi_select") and _CONSENT.search(q.label)):
+    if kind == "consent" or (q.type in ("boolean", "multi_select") and _CONSENT.search(q.label)):
         return Answer(q, "needs_you", note="a consent: yours to give")
-    if r.kind == "profile" and key == "resume":
-        return Answer(q, "filled", "tailored résumé PDF", "resume")
-    if r.kind == "profile" and key and key != "cover_letter":
+    if kind == "profile" and key == "resume":
+        if q.type == "file":
+            return Answer(q, "filled", "tailored résumé PDF", "resume")
+        return Answer(q, "needs_you", note="trawl doesn't know how to answer this")
+    if kind == "profile" and key and key != "cover_letter":
         if q.type == "file":
             return wait(f"a file ({key}): upload it yourself")
         v = value(profile, key) if profile else None
-        if v is None or v == "":
+        if v is None or (v == "" and key not in COUNTRY_KEYS):  # no permanent residency is an answer
             return wait(f"not in your profile: {key}")
         if q.type in ("select", "multi_select"):
-            chosen = pick(q.options, v)
+            chosen = choose(q.options, key, v, q.label, multi=q.type == "multi_select")
             return Answer(q, "filled", chosen, key) if chosen else wait(f"no option matches your {key}")
         if q.type == "boolean":
             return Answer(q, "filled", bool(v), key)
         return Answer(q, "filled", None, key)  # text: filled from the profile when submitting
-    if r.kind == "open" or key == "cover_letter":
+    if kind == "open" or key == "cover_letter":
         if q.type in ("select", "multi_select", "file", "boolean") or not (r.answer or "").strip():
             return wait("no draft")
         bad = invented(r.answer, facts + "\n" + q.label)
         note = f"check: {', '.join(bad)} not in the résumé or posting" if bad else ""
         return Answer(q, "drafted", r.answer.strip(), "draft", note)
-    if r.kind == "skip" and not q.required:
+    if kind == "skip" and not q.required:
         return Answer(q, "skipped")
     return Answer(q, "needs_you", note="trawl doesn't know how to answer this")
 

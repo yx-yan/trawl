@@ -18,10 +18,10 @@ import re
 from dataclasses import dataclass, field
 from typing import Literal
 
-from .answer import _norm, pick
+from .answer import COUNTRY_KEYS, _norm, choose, country_key, school_key, yes_no
 from .profile import Profile, value
 
-Kind = Literal["text", "choose", "check", "pick", "tick", "file"]
+Kind = Literal["text", "choose", "check", "pick", "named", "tick", "file"]
 
 
 @dataclass
@@ -29,7 +29,8 @@ class Step:
     field: str  # the element's id on the page (for "check": the checkbox group's name)
     label: str
     kind: Kind  # type text, choose in a combobox, tick checkboxes (Greenhouse), pick labelled
-    # radios or checkboxes (Ashby), tick a lone consent checkbox, attach a file
+    # radios or checkboxes (Ashby), choose among the inputs or select of one name (Lever), tick a
+    # lone consent checkbox, attach a file
     value: str | list[str]
     secret: bool = False  # from the profile: never logged or printed
     optional: bool = False  # a field the page may not have (EXTRAS)
@@ -82,7 +83,7 @@ def plan(answers: list[dict], profile: Profile | None, source: str = "greenhouse
     left: list[str] = []
     consents: list[str] = []
     for a in answers:
-        a = refill(a, profile)
+        a = refill(reroute(a), profile)
         if (given := consent(a, profile)) is not a:
             consents.append(a["question"]["label"])
             a = given
@@ -94,7 +95,7 @@ def plan(answers: list[dict], profile: Profile | None, source: str = "greenhouse
         elif status == "drafted":
             steps.append(Step(field, label, "text", v))
         elif status == "filled":
-            step = _filled(field, label, a, profile, gh)
+            step = _filled(field, label, a, profile, source)
             if step is None:
                 left.append(f"{label} (not in your profile: {a['source']})")
             else:
@@ -110,7 +111,7 @@ def plan(answers: list[dict], profile: Profile | None, source: str = "greenhouse
     return Plan(steps, left, consents)
 
 
-_MISSING = re.compile(r"(?:not in your profile|no option matches your): (\w+)")
+_MISSING = re.compile(r"(?:not in your profile: |no option matches your )(\w+)")
 
 
 # Kinds of consent, tried in this order: an AI notetaker's notice also mentions data
@@ -154,16 +155,30 @@ def consent(a: dict, profile: Profile | None) -> dict:
     return a | {"status": "filled", "value": True, "source": f"consent:{kind}", "note": ""}
 
 
+def reroute(a: dict) -> dict:
+    """An answer a form drafted earlier filled from the wrong field (a university for "High School
+    Name") goes back to waiting for the right one, which `refill` then reads."""
+    key = school_key(a["question"]["label"], a.get("source") or None)
+    if a["status"] == "filled" and a.get("source") and key != a["source"]:
+        return a | {"status": "needs_you", "value": None, "source": "", "note": f"not in your profile: {key}"}
+    return a
+
+
 def refill(a: dict, profile: Profile | None) -> dict:
     """A question that waited for a profile field when it was drafted, answered from the profile as
     it is now: filling in the profile helps the forms already drafted, without a model call."""
-    m = _MISSING.fullmatch(a.get("note") or "") if a["status"] == "needs_you" else None
-    v = value(profile, m.group(1)) if m and profile else None
-    if v is None or v == "":
+    if a["status"] != "needs_you" or profile is None:
         return a
-    q, key = a["question"], m.group(1)
+    q = a["question"]
+    m = _MISSING.fullmatch(a.get("note") or "")
+    key = m.group(1) if m else None
+    if q["type"] in ("select", "multi_select") and yes_no(q["options"]):
+        key = country_key(q["label"]) or key  # citizenship and residency: decided by the question's words
+    v = value(profile, key) if key else None
+    if v is None or (v == "" and key not in COUNTRY_KEYS):
+        return a
     if q["type"] in ("select", "multi_select"):
-        chosen = pick(q["options"], v)
+        chosen = choose(q["options"], key, v, q["label"], multi=q["type"] == "multi_select")
         return a | {"status": "filled", "value": chosen, "source": key, "note": ""} if chosen else a
     if q["type"] == "boolean":
         return a | {"status": "filled", "value": bool(v), "source": key, "note": ""}
@@ -172,20 +187,24 @@ def refill(a: dict, profile: Profile | None) -> dict:
     return a | {"status": "filled", "value": None, "source": key, "note": ""}  # text: read when filling
 
 
-def _filled(field: str, label: str, a: dict, profile: Profile | None, gh: bool) -> Step | None:
+# How each board shows a choice: Greenhouse as checkboxes named question_x[] (multi-select) or a
+# combobox; Ashby as labelled radios or checkboxes; Lever as radios, checkboxes or a <select> that
+# share the question's name
+CHOICE = {"ashby": "pick", "lever": "named"}
+
+
+def _filled(field: str, label: str, a: dict, profile: Profile | None, source: str) -> Step | None:
     v = a["value"]
     if a["source"] == "resume":
         return Step(field, label, "file", "resume")
     if isinstance(v, list):
-        # Greenhouse shows a multi-select as checkboxes named question_x[] and the rest as
-        # comboboxes; Ashby shows every choice as labelled radios or checkboxes
-        if not gh:
-            return Step(field, label, "pick", v)
+        if source in CHOICE:
+            return Step(field, label, CHOICE[source], v)
         return Step(field, label, "check" if field.endswith("[]") else "choose", v)
     if a["source"].startswith("consent:") and v is True:  # a lone checkbox the profile agrees to
         return Step(field, label, "tick", "")
-    if isinstance(v, bool):  # Ashby's yes/no questions
-        return None if gh else Step(field, label, "pick", ["Yes" if v else "No"])
+    if isinstance(v, bool):  # yes/no questions (Ashby, Lever); Greenhouse forms have none
+        return Step(field, label, CHOICE[source], ["Yes" if v else "No"]) if source in CHOICE else None
     if v is None:  # a text field filled from the profile, now
         text = value(profile, a["source"]) if profile else None
         if text is None or text == "" or isinstance(text, bool):

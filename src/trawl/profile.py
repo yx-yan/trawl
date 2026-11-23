@@ -42,12 +42,17 @@ class Profile(BaseModel):
     major: str | None = None
     graduation: str | None = Field(None, description="YYYY-MM")
     previous_university: str | None = Field(None, description="An earlier degree, e.g. your bachelor's")
+    high_school: str | None = None
+    high_school_graduation: str | None = Field(None, description="YYYY-MM")
     previous_degree: str | None = None
     previous_major: str | None = None
     previous_graduation: str | None = Field(None, description="YYYY-MM")
     gpa: str | None = None
     start_date: str | None = Field(None, description="Earliest full-time start, YYYY-MM")
     authorized_to_work: bool | None = Field(None, description="Already allowed to work in the job's country")
+    citizenship: str | None = Field(None, description="Countries, comma-separated, e.g. China")
+    languages: str | None = Field(None, description="Languages you speak, comma-separated")
+    permanent_residency: str | None = Field(None, description="Countries, comma-separated; empty for none")
     needs_sponsorship: bool | None = Field(None, description="Needs a work pass sponsored, now or later")
     current_employer: str | None = None
     current_title: str | None = None

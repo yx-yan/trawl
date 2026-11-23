@@ -4,14 +4,20 @@
 - Ashby has no documented endpoint for them; its own job page reads them from a public GraphQL
   endpoint (`jobs.ashbyhq.com/api/non-user-graphql`), which trawl reads the same way. It may change
   without notice, so a failure means "no questions", never a failed run.
-- Lever and MyCareersFuture: not yet (Lever's questions are only in the apply page's HTML;
-  MyCareersFuture applies through the candidate's own signed-in profile).
+- Lever has no API for them, but its apply page (`jobs.lever.co/<board>/<id>/apply`) is plain HTML:
+  the standard fields (résumé, name, email, location, links) are labelled inputs, and each block of
+  custom questions carries its own definition in a hidden `cards[<id>][baseTemplate]` input, as
+  JSON with each field's type, text, options and whether it's required.
+- MyCareersFuture: not at all (it applies through the candidate's own signed-in profile).
 """
 
 from __future__ import annotations
 
+import contextlib
+import json
 import re
 from dataclasses import asdict, dataclass, field
+from html.parser import HTMLParser
 
 import httpx
 
@@ -95,9 +101,96 @@ def ashby(http: httpx.Client, board: str, posting_id: str) -> list[Question]:
     return out
 
 
+_LEVER_TYPES = {"text": "text", "textarea": "long_text", "multiple-choice": "select",
+                "multiple-select": "multi_select", "dropdown": "select"}
+_LEVER_SKIP = {"comments"}  # "Additional information": a free-for-all nobody needs drafted
+
+
+class _LeverPage(HTMLParser):
+    """The apply page's questions: labelled standard fields, the cards' JSON templates, EEO selects."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.questions: list[Question] = []
+        self.cards: list[tuple[str, dict]] = []
+        self._label: list[str] | None = None  # text of the current .application-label, while inside it
+        self._depth = 0
+        self._last_label = ""
+        self._select: dict | None = None  # an EEO select being read
+        self._seen: set[str] = set()
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        a = {k: v or "" for k, v in attrs}
+        classes = a.get("class", "").split()
+        if self._label is not None:
+            self._depth += tag == "div"
+        elif tag == "div" and "application-label" in classes:
+            self._label, self._depth = [], 1
+        name, kind = a.get("name", ""), a.get("type", "text")
+        if tag == "input" and name.endswith("[baseTemplate]"):
+            with contextlib.suppress(ValueError):  # a template that isn't JSON: its questions stay unread
+                self.cards.append((name.removesuffix("[baseTemplate]"), json.loads(a.get("value") or "{}")))
+            return
+        if name.startswith("eeo[") and tag == "select":
+            self._select = {"name": name, "options": []}
+            return
+        if tag == "option" and self._select is not None:
+            self._select["value"] = a.get("value", "")
+            return
+        if (tag not in ("input", "textarea") or not name or name.startswith("cards[") or name in _LEVER_SKIP
+                or kind in ("hidden", "submit", "button") or name in self._seen):
+            return
+        self._seen.add(name)
+        label = re.sub(r"\s*✱\s*$", "", self._last_label).strip() or name
+        required = "required" in a or "✱" in self._last_label
+        qtype = "file" if kind == "file" else "long_text" if tag == "textarea" else "text"
+        self.questions.append(Question(name, label, required, qtype))
+
+    def handle_endtag(self, tag: str) -> None:
+        if self._label is not None and tag == "div":
+            self._depth -= 1
+            if self._depth == 0:
+                self._last_label = " ".join("".join(self._label).split())
+                self._label = None
+        if tag == "select" and self._select is not None:
+            s = self._select
+            labels = [o for o in s["options"] if o]
+            title = s["name"][4:-1].replace("_", " ").capitalize()
+            self.questions.append(Question(s["name"], title, False, "select", labels, demographic=True))
+            self._select = None
+
+    def handle_data(self, data: str) -> None:
+        if self._label is not None:
+            self._label.append(data)
+        if self._select is not None and "value" in self._select:
+            text = data.strip()
+            if text and self._select.pop("value", None):
+                self._select["options"].append(text)
+
+
+def lever(http: httpx.Client, url: str) -> list[Question]:
+    resp = http.get(url.rstrip("/").removesuffix("/apply") + "/apply")
+    resp.raise_for_status()
+    page = _LeverPage()
+    page.feed(resp.text)
+    out = list(page.questions)
+    for card, template in page.cards:
+        for i, f in enumerate(template.get("fields") or []):
+            kind = _LEVER_TYPES.get(f.get("type"))
+            if kind is None:
+                continue
+            options = [str(o.get("text", "")) for o in f.get("options") or [] if o.get("text")]
+            out.append(Question(f"{card}[field{i}]", " ".join((f.get("text") or "").split()),
+                                bool(f.get("required")), kind, options,
+                                description=html_to_text(f.get("description") or "")[:500]))
+    if not out:
+        raise ValueError(f"lever: no form at {url}")
+    return out
+
+
 def board_from_url(url: str) -> str | None:
-    """Ashby's board name from a job URL: jobs.ashbyhq.com/<board>/<id>."""
-    m = re.match(r"https?://jobs\.ashbyhq\.com/([^/]+)/", url)
+    """The board's name from a job URL: jobs.ashbyhq.com/<board>/<id> or jobs.lever.co/<board>/<id>."""
+    m = re.match(r"https?://jobs\.(?:ashbyhq\.com|lever\.co)/([^/]+)/", url)
     return m.group(1) if m else None
 
 
@@ -107,4 +200,6 @@ def fetch(http: httpx.Client, source: str, external_id: str, facts: dict, url: s
         return greenhouse(http, facts["board"], external_id)
     if source == "ashby" and (board := facts.get("board") or board_from_url(url)):
         return ashby(http, board, external_id)
+    if source == "lever" and url:
+        return lever(http, url)
     return None
