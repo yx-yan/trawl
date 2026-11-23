@@ -19,7 +19,7 @@ with evals, a human approval queue, an audit log, and a Docker deployment.
 
 | Milestone | What it does | |
 |---|---|---|
-| M0 | Collect from Greenhouse, Lever, Ashby, MyCareersFuture; daily Telegram digest | ✅ |
+| M0 | Collect from Greenhouse, Lever, Ashby, Workday, SmartRecruiters, MyCareersFuture; daily Telegram digest | ✅ |
 | M1 | Judge each job by its description (model facts, rule verdicts), score fit against the résumé, weekly skill-gap report; evals | ✅ |
 | M2 | A résumé tailored to each good fit and drafted form answers, sent with the digest | ✅ |
 | M3 | Application filler: pre-fill in Chrome, approve in the terminal, submit, audit log (Greenhouse, Ashby, Lever) | ✅ |

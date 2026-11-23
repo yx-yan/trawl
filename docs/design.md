@@ -11,11 +11,17 @@ Docker deployment, and a person approving anything that acts in the world.
 
 Greenhouse, Lever and Ashby publish every company's open jobs as JSON, and MyCareersFuture
 (Singapore's national job portal) has a public search API. That covers most AI startups and
-the Singapore market without scraping. LinkedIn is never scraped: its terms forbid it and
+the Singapore market without scraping. Large employers (banks, NVIDIA, Salesforce, Grab) are on
+Workday or SmartRecruiters: Workday's careers sites read their jobs from a JSON endpoint
+(`/wday/cxs/<tenant>/<site>/jobs`) that trawl reads the same way, searched for Singapore, and
+SmartRecruiters has a public postings API filtered by country. LinkedIn is never scraped: its terms forbid it and
 accounts get banned. LinkedIn jobs will come in through its alert emails or a pasted link.
 
 Each connector is one function, `fetch(http, key) -> list[Posting]`, so adding a board means
-adding one module. A board that fails is reported and skipped; one company changing its
+adding one module. Lists without descriptions (MyCareersFuture, Workday, SmartRecruiters) come
+with a `describe` that `process` calls only for postings the title rules let through: of about
+1,200 Singapore postings from the Workday and SmartRecruiters companies added at once, about 290
+needed one. A board that fails is reported and skipped; one company changing its
 board name must not stop the daily run.
 
 ## 3. Keep every posting in a wanted location, not only title matches

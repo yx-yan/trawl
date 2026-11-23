@@ -1,5 +1,6 @@
 # Where trawl looks for jobs. Board keys are the company's name in the board's URL,
 # e.g. boards-api.greenhouse.io/v1/boards/<key>/jobs. Add a company by adding its key.
+# `trawl where` finds boards to add: the company boards behind MyCareersFuture jobs.
 
 [locations]
 # A posting is kept if its location text contains any of these (case-insensitive).
@@ -8,7 +9,7 @@ include = ["Singapore"]
 
 [greenhouse]
 boards = ["anthropic", "databricks", "scaleai", "gleanwork", "mongodb", "stripe", "datadog",
-          "cloudflare", "elastic", "okta", "twilio", "figma"]
+          "cloudflare", "elastic", "okta", "twilio", "figma", "motional"]
 
 [lever]
 boards = ["palantir", "spotify"]
@@ -16,6 +17,18 @@ boards = ["palantir", "spotify"]
 [ashby]
 boards = ["sierra", "decagon", "openai", "cohere", "harvey", "perplexity", "elevenlabs", "writer",
           "cognition", "ramp", "notion", "linear", "langchain"]
+
+[workday]
+# "<tenant>.<wdN>/<site>" from the careers site's URL: https://<tenant>.<wdN>.myworkdayjobs.com/<site>.
+# Searched for Singapore; trawl can't fill Workday forms (each employer needs its own account).
+boards = ["nvidia.wd5/NVIDIAExternalCareerSite", "salesforce.wd12/External_Career_Site",
+          "adobe.wd5/external_experienced", "paypal.wd1/jobs", "mastercard.wd1/CorporateCareers",
+          "workday.wd5/Workday", "crowdstrike.wd5/crowdstrikecareers", "hp.wd5/ExternalCareerSite",
+          "zendesk.wd1/zendesk", "dbs.wd3/DBS_Careers", "ocbc.wd102/External", "citi.wd5/2"]
+
+[smartrecruiters]
+# The company's identifier in jobs.smartrecruiters.com/<key>; only its Singapore postings are read.
+boards = ["Grab", "ServiceNow", "Wise", "DeliveryHero", "BoschGroup"]
 
 [mcf]
 # MyCareersFuture (Singapore): search queries rather than companies.

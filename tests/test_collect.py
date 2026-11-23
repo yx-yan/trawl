@@ -44,7 +44,10 @@ def test_mcf(board_http: httpx.Client) -> None:
 
 
 def test_every_connector_registered() -> None:
-    assert set(CONNECTORS) == {"greenhouse", "lever", "ashby", "mcf"}
+    assert set(CONNECTORS) == {"greenhouse", "lever", "ashby", "workday", "smartrecruiters", "mcf"}
+    from trawl.config import REPO_SOURCES, Sources
+
+    assert set(Sources.load(REPO_SOURCES).boards) <= set(CONNECTORS)  # every board in sources.toml
 
 
 def test_mcf_facts(board_http: httpx.Client) -> None:
