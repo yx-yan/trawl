@@ -78,7 +78,25 @@ CREATE TABLE IF NOT EXISTS audit_log (
     detail     JSONB NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS audit_log_posting ON audit_log (posting_id, at);
+-- Where each application stands, whoever sent it: trawl records "applied" when it submits; the
+-- person records applications made elsewhere (MyCareersFuture), interviews, offers and rejections
+CREATE TABLE IF NOT EXISTS stages (
+    id         BIGSERIAL PRIMARY KEY,
+    posting_id BIGINT NOT NULL REFERENCES postings (id),
+    stage      TEXT NOT NULL,  -- applied, interview, offer, rejected, withdrawn, skipped
+    at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    note       TEXT NOT NULL DEFAULT '',
+    by_trawl   BOOLEAN NOT NULL DEFAULT false  -- a submission trawl made: it can't be undone
+);
+CREATE INDEX IF NOT EXISTS stages_posting ON stages (posting_id, at);
+INSERT INTO stages (posting_id, stage, at, note, by_trawl)
+    SELECT posting_id, 'applied', submitted_at, '', true FROM applications a
+    WHERE status = 'submitted' AND submitted_at IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM stages s WHERE s.posting_id = a.posting_id AND s.stage = 'applied');
 """
+
+
+STAGES = ("applied", "interview", "offer", "rejected", "withdrawn", "skipped")
 
 
 @dataclass
@@ -334,8 +352,23 @@ class Store:
                                  (posting_id,)).fetchone() is not None
 
     def mark_submitted(self, posting_id: int, source_hash: str) -> None:
-        self.conn.execute("UPDATE applications SET status = 'submitted', submitted_at = now() "
-                          "WHERE posting_id = %s AND source_hash = %s", (posting_id, source_hash))
+        with self.conn.transaction():
+            self.conn.execute("UPDATE applications SET status = 'submitted', submitted_at = now() "
+                              "WHERE posting_id = %s AND source_hash = %s", (posting_id, source_hash))
+            self.add_stage(posting_id, "applied", by_trawl=True)
+
+    def add_stage(self, posting_id: int, stage: str, note: str = "", *, by_trawl: bool = False) -> int:
+        if stage not in STAGES:
+            raise ValueError(f"unknown stage: {stage}")
+        row = self.conn.execute("INSERT INTO stages (posting_id, stage, note, by_trawl) "
+                                "VALUES (%s, %s, %s, %s) RETURNING id",
+                                (posting_id, stage, note, by_trawl)).fetchone()
+        return row["id"]
+
+    def remove_stage(self, stage_id: int) -> bool:
+        """Undo a stage the person recorded; one trawl recorded for a submission it made stays."""
+        return self.conn.execute("DELETE FROM stages WHERE id = %s AND NOT by_trawl RETURNING id",
+                                 (stage_id,)).fetchone() is not None
 
     def submitted_since(self, hours: int = 24) -> int:
         row = self.conn.execute("SELECT count(*) AS n FROM audit_log WHERE event = 'submitted' "

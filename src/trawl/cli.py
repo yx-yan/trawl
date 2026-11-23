@@ -1,6 +1,7 @@
-"""Command line: `trawl collect`, `trawl process`, `trawl tailor`, `trawl digest`, `trawl run` (all
-four, for cron), `trawl gaps`, `trawl profile` (the encrypted answers that fill forms), and
-`trawl apply` (fill a form in Chrome; submit once you approve it)."""
+"""Command line: `trawl collect`, `trawl process`, `trawl digest`, `trawl run` (collect, process
+and digest, for cron), `trawl gaps`, and on the Mac: `trawl tailor` (on demand), `trawl profile`
+(the encrypted answers that fill forms), `trawl apply` (fill a form in Chrome; submit once you
+approve it) and `trawl app` (the desktop app)."""
 
 from __future__ import annotations
 
@@ -163,16 +164,24 @@ def main(argv: list[str] | None = None) -> None:
     t.add_argument("--again", action="store_true", help="tailor again even if this résumé was already done")
     g = sub.add_parser("gaps", help="skills eligible jobs ask for that the résumé doesn't show")
     g.add_argument("--send", action="store_true", help="send to Telegram instead of printing")
-    sub.add_parser("run", help="collect, process, tailor, then digest (what cron runs)")
+    sub.add_parser("run", help="collect, process, then digest (what cron runs)")
     a = sub.add_parser("apply", help="fill a form in Chrome; submit once you approve (Greenhouse, Ashby)")
     a.add_argument("id", type=int, help="the posting id (#id in the digest)")
     a.add_argument("--no-submit", action="store_true", help="fill the form to look at; never submit")
     a.add_argument("--log", action="store_true", help="show this application's audit log instead")
+    ap = sub.add_parser("app", help="open the desktop app (on the Mac)")
+    ap.add_argument("--no-window", action="store_true", help="serve the page for a browser instead")
+    ap.add_argument("--port", type=int, default=0)
     pr = sub.add_parser("profile", help="the encrypted answers that fill application forms")
     pr.add_argument("action", choices=["init", "edit", "show"],
                     help="init: make a key for .env; edit: open it in $EDITOR; show: which fields are set")
     args = parser.parse_args(argv)
 
+    if args.command == "app":
+        from .desktop.__main__ import main as app_main
+
+        app_main(["--port", str(args.port)] + (["--no-window"] if args.no_window else []))
+        return
     load_dotenv()
     settings = Settings.from_env()
     if args.command == "profile":
@@ -204,7 +213,7 @@ def main(argv: list[str] | None = None) -> None:
             print(process(store, criteria, http, new_client(), resume))
         if args.command == "tailor" and args.ids:
             tailor_ids(store, settings, http, args.ids, args.out, again=args.again)
-        elif args.command in ("tailor", "run") and (loaded := load_tailoring(settings)):
+        elif args.command == "tailor" and (loaded := load_tailoring(settings)):
             done, _ = tailor_new(store, new_client(), *loaded, min_score=settings.tailor_min_score,
                                  limit=settings.tailor_limit, http=http, profile=load_profile(settings))
             print(f"prepared {done} application{'s' if done != 1 else ''}")
