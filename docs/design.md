@@ -265,3 +265,26 @@ trawl waits for the page to settle before typing. Submit is a button behind hCap
 puzzle shows, trawl says so and waits for the person, as it does for an emailed code, and the
 `/thanks` page is the confirmation. Required fields known only by name, and required selects, count
 as empty until filled.
+
+## 15. Where to apply when MyCareersFuture won't take you
+
+MyCareersFuture takes applications only from Singapore citizens and permanent residents, yet most of
+the eligible jobs trawl finds are there: employers must advertise a job on it (under the Fair
+Consideration Framework) before hiring for it on an Employment Pass or S Pass. So it stays a source
+of jobs, and `where.py` looks for the same job somewhere a foreign candidate can apply, cheapest
+first:
+
+- **The same job on another board trawl collects** (same fingerprint). A second copy on
+  MyCareersFuture itself doesn't count.
+- **The company's own board** on Greenhouse, Lever or Ashby, guessed from its name and its website's
+  domain. With the job on it, it's a link trawl can fill once the board is collected. A board
+  guessed from one word of the name ("dcs") counts only with the job on it, since it may belong to
+  someone else.
+- **The company's website**, from MyCareersFuture's own company record (by UEN), and its careers
+  page if `/careers`, `/jobs` or `/career` answers.
+- **A LinkedIn and a Google search**, as links for the person: trawl never scrapes either.
+
+Leads are kept with the posting (`leads`, `leads_at`); `trawl where` looks up the open eligible
+MyCareersFuture jobs without them, and the desktop app looks one up on demand. On the first run, 17
+of 51 jobs had more than a search, among them a careers page for every large employer, and one
+company board trawl didn't collect yet.

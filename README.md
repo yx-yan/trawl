@@ -41,6 +41,7 @@ cp .env.example .env                     # add a Telegram bot token to get the d
 .venv/bin/trawl digest --dry-run         # print what the digest would send
 .venv/bin/trawl run                      # collect, process, digest: what the server's timer runs
 .venv/bin/trawl gaps                     # skills the jobs ask for that the résumé doesn't show
+.venv/bin/trawl where                    # where else to apply for MyCareersFuture jobs (citizens and PRs only there)
 ```
 
 The server collects, judges and scores every day. Tailoring and applying happen on the Mac, for
