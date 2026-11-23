@@ -68,6 +68,16 @@ CREATE TABLE IF NOT EXISTS applications (
 );
 -- M2b: drafted answers to the application form (no profile text values, only field names)
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS answers JSONB;
+-- M3: submission, and every step towards it (field names and counts, never the values typed)
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;
+CREATE TABLE IF NOT EXISTS audit_log (
+    id         BIGSERIAL PRIMARY KEY,
+    posting_id BIGINT NOT NULL REFERENCES postings (id),
+    at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    event      TEXT NOT NULL,
+    detail     JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS audit_log_posting ON audit_log (posting_id, at);
 """
 
 
@@ -119,6 +129,8 @@ class Application:
     resume_tex: str
     resume_pdf: bytes
     answers: list[dict] | None = None
+    source_hash: str = ""
+    status: str = "drafted"
 
 
 @dataclass
@@ -311,6 +323,33 @@ class Store:
         self.conn.execute("UPDATE applications SET sent_at = now() WHERE posting_id = %s AND sent_at IS NULL",
                           (posting_id,))
 
+    def latest_application(self, posting_id: int) -> Application | None:
+        """The newest tailored application for a posting, whatever résumé it came from."""
+        row = self.conn.execute(f"{_APPLICATION} WHERE a.posting_id = %s ORDER BY a.created_at DESC LIMIT 1",
+                                (posting_id,)).fetchone()
+        return _application(row) if row else None
+
+    def submitted(self, posting_id: int) -> bool:
+        return self.conn.execute("SELECT 1 FROM applications WHERE posting_id = %s AND status = 'submitted'",
+                                 (posting_id,)).fetchone() is not None
+
+    def mark_submitted(self, posting_id: int, source_hash: str) -> None:
+        self.conn.execute("UPDATE applications SET status = 'submitted', submitted_at = now() "
+                          "WHERE posting_id = %s AND source_hash = %s", (posting_id, source_hash))
+
+    def submitted_since(self, hours: int = 24) -> int:
+        row = self.conn.execute("SELECT count(*) AS n FROM audit_log WHERE event = 'submitted' "
+                                "AND at > now() - make_interval(hours => %s)", (hours,)).fetchone()
+        return row["n"]
+
+    def log(self, posting_id: int, event: str, **detail: Any) -> None:
+        self.conn.execute("INSERT INTO audit_log (posting_id, event, detail) VALUES (%s, %s, %s)",
+                          (posting_id, event, Jsonb(detail)))
+
+    def audit(self, posting_id: int) -> list[dict]:
+        return self.conn.execute("SELECT at, event, detail FROM audit_log WHERE posting_id = %s "
+                                 "ORDER BY at, id", (posting_id,)).fetchall()
+
     def gap_counts(self, days: int = 14) -> list[tuple[str, int, int]]:
         """(gap, jobs, FDE jobs) across eligible jobs still listed in the last `days` days."""
         rows = self.conn.execute(
@@ -384,7 +423,7 @@ class Store:
 
 _APPLICATION = """
     SELECT a.posting_id, p.company, p.title, p.url, a.tailoring, a.resume_tex, a.resume_pdf, a.answers,
-           a.sent_at
+           a.source_hash, a.status, a.sent_at
     FROM applications a JOIN postings p ON p.id = a.posting_id
 """
 

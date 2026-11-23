@@ -22,7 +22,7 @@ with evals, a human approval queue, an audit log, and a Docker deployment.
 | M0 | Collect from Greenhouse, Lever, Ashby, MyCareersFuture; daily Telegram digest | ✅ |
 | M1 | Judge each job by its description (model facts, rule verdicts), score fit against the résumé, weekly skill-gap report; evals | ✅ |
 | M2 | A résumé tailored to each good fit and drafted form answers, sent with the digest | ✅ |
-| M3 | Approval queue and application filler: pre-fill, screenshot, wait for approval, then submit | |
+| M3 | Application filler: pre-fill in Chrome, wait for approval, submit, audit log (Greenhouse ✅; Ashby, Telegram approval next) | ◐ |
 | M4 | Status tracking from Gmail, funnel dashboard | |
 | M5 | Multi-tenant, RBAC, PII encryption, tracing, delivery docs | |
 
@@ -41,6 +41,17 @@ cp .env.example .env                     # add a Telegram bot token to get the d
 .venv/bin/trawl digest --dry-run         # print what the digest would send
 .venv/bin/trawl run                      # all four; this is what cron runs
 .venv/bin/trawl gaps                     # skills the jobs ask for that the résumé doesn't show
+```
+
+Applying runs on your own machine, in a visible Chrome window, never on the server:
+
+```bash
+.venv/bin/pip install -e ".[apply]"      # Playwright; it drives the Chrome you have installed
+TRAWL_DEPLOY_HOST=user@host deploy/deploy.sh tunnel   # the server's database on localhost:5433
+export TRAWL_DATABASE_URL=postgresql://trawl:trawl@localhost:5433/trawl
+.venv/bin/trawl apply 676 --no-submit    # fill the form to look at; nothing is sent
+.venv/bin/trawl apply 676                # fill, you finish and check it, type "submit" to send
+.venv/bin/trawl apply 676 --log          # every step it took
 ```
 
 Or entirely in Docker: `docker compose run --rm trawl run`.

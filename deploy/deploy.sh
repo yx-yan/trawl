@@ -5,6 +5,7 @@
 #   TRAWL_DEPLOY_HOST=user@1.2.3.4 deploy/deploy.sh run    # run collect + digest now
 #   TRAWL_DEPLOY_HOST=user@1.2.3.4 deploy/deploy.sh logs   # recent runs
 #   TRAWL_DEPLOY_HOST=user@1.2.3.4 deploy/deploy.sh profile  # copy résumé, bank, criteria to ~/.trawl
+#   TRAWL_DEPLOY_HOST=user@1.2.3.4 deploy/deploy.sh tunnel   # the server's db on localhost:5433, for trawl apply
 #
 # Personal files stay out of this public repo. `profile` copies ~/.trawl/criteria.toml, and from
 # the private résumé repo's origin/main (merged = approved; local drafts never leave the Mac):
@@ -60,8 +61,14 @@ run)
 logs)
     ssh "$host" 'journalctl -u trawl -n 200 --no-pager'
     ;;
+tunnel)
+    # `trawl apply` runs here, in this Mac's Chrome, against the server's database
+    echo "the server's database is on localhost:5433 until Ctrl-C; in another terminal:"
+    echo "  TRAWL_DATABASE_URL=postgresql://trawl:trawl@localhost:5433/trawl .venv/bin/trawl apply <id>"
+    ssh -N -L 5433:127.0.0.1:5432 "$host"
+    ;;
 *)
-    echo "usage: deploy.sh [deploy|run|logs|profile]" >&2
+    echo "usage: deploy.sh [deploy|run|logs|profile|tunnel]" >&2
     exit 2
     ;;
 esac
