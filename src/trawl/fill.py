@@ -213,8 +213,12 @@ SIGNALS_JS = """(submit) => {
     code_text: /security code/i.test(text),
     errors: [...new Set([...document.querySelectorAll('[class*="error"], [role="alert"]')]
       .map(e => e.innerText.trim()).filter(t => t && t.length < 200))].slice(0, 10),
-    // the browser's own checks (a required box, an email's format) stop Submit without a message
+    // the browser's own checks (a required box, an email's format), which stop a plain form's Submit
+    // without a message. Greenhouse submits from script, past them: these only explain a Submit that
+    // did nothing. A box in a group with one ticked isn't missing anything.
     invalid: [...document.querySelectorAll('#application-form :invalid')].filter(e => e.validationMessage)
+      .filter(e => !((e.type === 'checkbox' || e.type === 'radio') && e.name &&
+                     document.querySelector(`input[name="${CSS.escape(e.name)}"]:checked`)))
       .map(e => ((e.labels && e.labels[0] ? e.labels[0].innerText : e.id || e.name).replace(/\\*$/, '').trim()
                  + ': ' + e.validationMessage)).slice(0, 10),
   };
@@ -236,8 +240,8 @@ def outcome(before: dict, now: dict) -> Result:
     if now["code_input"] or (now["code_text"] and not before["code_text"]):
         return Result("code")
     new = [e for e in now["errors"] if e not in before["errors"]]
-    if new or now.get("invalid"):
-        return Result("errors", new + now.get("invalid", []))
+    if new:
+        return Result("errors", new)
     return Result("pending")
 
 
@@ -262,16 +266,22 @@ def submit(page: Page, board: Board, wait_s: float = 20) -> Result:
 def wait_outcome(page: Page, board: Board, before: dict, wait_s: float, *,
                  until: tuple[str, ...] = ("confirmed", "code", "errors")) -> Result:
     deadline = time.monotonic() + wait_s
-    result = Result("pending")
+    result, now = Result("pending"), {}
     while time.monotonic() < deadline:
         try:
-            result = outcome(before, signals(page, board))
+            now = signals(page, board)
+            result = outcome(before, now)
         except Exception:  # noqa: BLE001 - the page is navigating
             result = Result("pending")
         if result.outcome in until:
             return result
         page.wait_for_timeout(500)
-    return result if result.outcome != "pending" else Result("unknown")
+    if result.outcome != "pending":
+        return result
+    # nothing happened: the browser's own checks are the likely reason, if it has any
+    if now.get("form") and now.get("invalid"):
+        return Result("errors", now["invalid"])
+    return Result("unknown")
 
 
 def launch(playwright, profile_dir: Path):  # noqa: ANN001, ANN201 - playwright types are optional
