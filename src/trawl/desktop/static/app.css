@@ -172,3 +172,16 @@ ul.plain li { padding: 3px 0; }
 .weeks .lbl { font-size: 10px; color: var(--faint); }
 .weeks .cnt { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .error { margin: 40px auto; max-width: 520px; color: var(--bad); }
+
+/* preparing and applying */
+.hint { color: var(--muted); margin-top: 8px; }
+.task { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.task-head { padding: 7px 12px; font-weight: 600; background: var(--tag); }
+.task.waiting .task-head { background: color-mix(in srgb, var(--amber) 22%, transparent); }
+.task.done .task-head { background: color-mix(in srgb, var(--good) 18%, transparent); }
+.task.failed .task-head { background: color-mix(in srgb, var(--bad) 16%, transparent); }
+.log { margin: 0; padding: 10px 12px; max-height: 260px; overflow: auto; font: 11.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; white-space: pre-wrap; }
+.prompt { padding: 10px 12px; border-top: 1px solid var(--line); }
+.prompt .actions { margin-top: 8px; }
+.task-error { padding: 10px 12px; color: var(--bad); border-top: 1px solid var(--line); }
+.nav-foot a { color: var(--amber); font-weight: 600; }

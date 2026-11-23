@@ -101,3 +101,85 @@ def test_screenshots_stay_in_their_folder(tmp_path: Path) -> None:
     assert queries.screenshot(7, "submitted-20261123-120000.png", tmp_path) is not None
     assert queries.screenshot(7, "../../secret.png", tmp_path) is None
     assert queries.screenshot(8, "submitted-20261123-120000.png", tmp_path) is None
+
+
+# --- tasks: preparing and applying, the page answering what trawl asks --------------------------------
+
+from trawl.desktop import server  # noqa: E402
+from trawl.desktop.tasks import Busy, Tasks, prompt_for  # noqa: E402
+
+
+def test_prompt_for_turns_trawls_questions_into_choices() -> None:
+    approve = prompt_for("\nFinish the form in Chrome and check every field. "
+                         "Type 'submit' to send it, or press Enter to stop: ")
+    assert approve["kind"] == "approve"
+    assert approve["text"] == "Finish the form in Chrome and check every field."
+    assert [c["reply"] for c in approve["choices"]] == ["submit", ""]
+    assert prompt_for("Does the page say it was submitted? [y/N] ")["kind"] == "yesno"
+    close = prompt_for("\nLook it over in Chrome; nothing will be submitted. Press Enter to close. ")
+    assert close["kind"] == "close"
+
+
+def wait(tasks: Tasks, task_id: int, state: str, timeout: float = 5) -> dict:
+    import time
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        t = tasks.get(task_id)
+        if t.state == state:
+            return t.view()
+        time.sleep(0.02)
+    raise AssertionError(f"task {task_id} is {tasks.get(task_id).state}, not {state}")
+
+
+def test_tasks_wait_for_the_page_and_allow_one_application_at_a_time() -> None:
+    tasks = Tasks()
+
+    def work(task):  # noqa: ANN001, ANN202
+        task.say("filled 3 fields")
+        return "submitted" if task.ask("Type 'submit' to send it") == "submit" else "stopped"
+
+    t = tasks.start(1, "apply", work)
+    wait(tasks, t.id, "waiting")
+    with pytest.raises(Busy):
+        tasks.start(1, "prepare", lambda _: "x")  # one task per job
+    with pytest.raises(Busy):
+        tasks.start(2, "apply", lambda _: "x")  # one Chrome window
+    assert tasks.start(2, "prepare", lambda _: "prepared")  # preparing another job is fine
+    assert tasks.reply(t.id, "submit")
+    done = wait(tasks, t.id, "done")
+    assert (done["result"], done["messages"], done["prompt"]) == ("submitted", ["filled 3 fields"], None)
+    assert not tasks.reply(t.id, "submit")  # nothing waiting any more
+
+
+def test_a_failing_task_shows_why() -> None:
+    tasks = Tasks()
+
+    def work(_):  # noqa: ANN001, ANN202
+        raise RuntimeError("the form requires a GPA")
+
+    t = tasks.start(1, "apply", work)
+    assert wait(tasks, t.id, "failed")["error"] == "the form requires a GPA"
+
+
+def test_apply_through_the_api(store, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ANN001
+    ids = seed(store)
+
+    def fake_apply(store, settings, posting_id, task, submit):  # noqa: ANN001, ANN202
+        task.say(f"#{posting_id} filled")
+        reply = task.ask("Finish the form in Chrome. Type 'submit' to send it, or press Enter to stop: ")
+        return "submitted" if submit and reply == "submit" else "stopped"
+
+    monkeypatch.setattr(server, "apply_work", fake_apply)
+    tasks = Tasks()
+    client = TestClient(create_app(store, tasks=tasks))
+    t = client.post(f"/api/jobs/{ids['ashby']}/apply", json={"submit": True}).json()
+    wait(tasks, t["id"], "waiting")
+    assert client.get(f"/api/jobs/{ids['ashby']}").json()["task"] == t["id"]
+    view = client.get(f"/api/tasks/{t['id']}").json()
+    assert view["prompt"]["kind"] == "approve" and view["messages"] == [f"#{ids['ashby']} filled"]
+    assert client.post(f"/api/jobs/{ids['lever']}/apply", json={}).status_code == 409  # one Chrome window
+    assert client.post(f"/api/tasks/{t['id']}/reply", json={"reply": "submit"}).is_success
+    assert wait(tasks, t["id"], "done")["result"] == "submitted"
+    assert client.post(f"/api/tasks/{t['id']}/reply", json={"reply": "submit"}).status_code == 409
+    assert client.post("/api/jobs/999999/prepare", json={}).status_code == 404

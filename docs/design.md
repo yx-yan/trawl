@@ -237,5 +237,10 @@ the server sent résumés nobody used.
   "prepared" with a tailored application, else "new".
 - **Jobs, not postings.** As in the digest, a job posted on two boards shows once, and the funnel
   counts fingerprints, so one role on Greenhouse and MyCareersFuture is one job applied to.
+- **Preparing and applying are tasks the page follows.** Each runs in its own thread (Playwright's
+  sync API stays in the thread that started it) and keeps what it said. Applying runs the same
+  `apply.run` as the terminal; its questions ("Type 'submit'", "[y/N]") become prompts with buttons,
+  and the task waits for the page's answer. One task per job, and one application at a time: there
+  is one Chrome window to watch. A question waiting while another job is open shows in the sidebar.
 - **What the page can read is fixed.** Screenshots are served only from that job's folder, by a
   name that can't leave it.

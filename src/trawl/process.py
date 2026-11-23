@@ -26,7 +26,7 @@ from .decide import Criteria, Verdict, decide, prefilter
 from .extract import Client, JobFacts, Usage, extract_with_retry, with_retry
 from .match import RISE, match
 from .profile import Profile
-from .store import Pending, Store, ToTailor
+from .store import Application, Pending, Store, ToTailor
 from .tailor import Compiler, Resume, Tailoring, ask, finish
 
 WORKERS = 8
@@ -186,3 +186,22 @@ def prepare(client: Client, resume: Resume, p: ToTailor, http: httpx.Client | No
     except Exception as e:  # noqa: BLE001
         return tailoring, None, str(e)
     return tailoring, [a.to_dict() for a in answers], ""
+
+
+def prepare_one(store: Store, new_client: Callable[[], Client], loaded: tuple[Resume, str, Compiler],
+                profile: Profile | None, http: httpx.Client | None, posting_id: int, *,
+                again: bool = False) -> tuple[Application, str]:
+    """One job's tailored résumé and drafted form, made now unless this résumé already has them (or
+    `again`); returns it and why the form couldn't be drafted, if it couldn't."""
+    resume, rhash, compile_tex = loaded
+    p = store.posting(posting_id)
+    if p is None:
+        raise ValueError(f"#{posting_id}: no such posting")
+    app = None if again else store.application(posting_id, rhash)
+    note = ""
+    if app is None:
+        (t, usage), answers, note = prepare(new_client(), resume, p, http, profile)
+        r = finish(resume, compile_tex, t, usage, p.title)
+        store.save_application(posting_id, rhash, r.record(), r.tex, r.pdf, answers)
+        app = store.application(posting_id, rhash)
+    return app, note

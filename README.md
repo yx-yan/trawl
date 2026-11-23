@@ -23,7 +23,7 @@ with evals, a human approval queue, an audit log, and a Docker deployment.
 | M1 | Judge each job by its description (model facts, rule verdicts), score fit against the résumé, weekly skill-gap report; evals | ✅ |
 | M2 | A résumé tailored to each good fit and drafted form answers, sent with the digest | ✅ |
 | M3 | Application filler: pre-fill in Chrome, approve in the terminal, submit, audit log (Greenhouse, Ashby) | ✅ |
-| M4 | Desktop app on the Mac: jobs, applications, progress, funnel ✅; preparing and applying from it, status from Gmail next | ◐ |
+| M4 | Desktop app on the Mac: jobs, applications, progress, funnel; prepare and apply from it ✅; status from Gmail next | ◐ |
 | M5 | Multi-tenant, RBAC, PII encryption, tracing, delivery docs | |
 
 ## Run it
@@ -55,7 +55,9 @@ echo "TRAWL_SSH_HOST=user@host" >> .env  # read the server's database through ss
 ```
 
 Jobs to do, in progress and done, each with its fit, the tailored résumé, the drafted form,
-screenshots and every step trawl took; record applications made elsewhere (MyCareersFuture),
+screenshots and every step trawl took. **Prepare** tailors the résumé and drafts the form;
+**Apply** opens Chrome and fills it, and what `trawl apply` would ask in a terminal (submit? did it go
+through?) is asked on the page instead. Also record applications made elsewhere (MyCareersFuture),
 interviews, offers and rejections; and the funnel from eligible to offer. The app runs the code in
 this checkout, so `git pull` needs only a restart.
 

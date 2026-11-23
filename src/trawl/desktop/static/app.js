@@ -14,7 +14,7 @@ const FILTERS = {
 };
 const BOARDS = { greenhouse: "Greenhouse", ashby: "Ashby", lever: "Lever", mcf: "MyCareersFuture" };
 
-const state = { jobs: [], filter: "todo", source: "", q: "", selected: null };
+const state = { jobs: [], filter: "todo", source: "", q: "", selected: null, following: {}, last: {} };
 const $main = document.getElementById("main");
 
 // --- helpers ------------------------------------------------------------------------------------
@@ -135,6 +135,8 @@ async function showJob(id) {
     <div>${pill(j.status)} <span class="tag">#${j.id}</span> ${j.track ? `<span class="tag">${esc(j.track)}</span>` : ""}
       ${(j.flags || []).map(f => `<span class="tag">${esc(f)}</span>`).join(" ")}</div>
 
+    ${actions(j)}
+
     <section><h2>Fit</h2>
       <div class="fit">
         <span class="k">Score</span><span>${m.score ?? "not scored"}</span>
@@ -174,12 +176,101 @@ async function showJob(id) {
     try { await api(`/api/stages/${b.dataset.stage}`, { method: "DELETE" }); await refresh(j.id); } catch (e) { alert(e.message); }
   });
   $d.querySelectorAll(".shots img").forEach(img => img.onclick = () => lightbox(img.src));
+  $d.querySelectorAll("[data-act]").forEach(b => b.onclick = () => act(j, b.dataset.act, b));
+  if (j.task) follow(j.task, j.id);
+  else if (state.last[j.id]) renderTask(state.last[j.id]);
   const toggle = document.getElementById("show-pdf");
   if (toggle) toggle.onclick = () => {
     const box = document.getElementById("pdf-box");
     box.innerHTML = box.innerHTML ? "" : `<iframe class="pdf" src="/api/jobs/${j.id}/resume.pdf"></iframe>`;
     toggle.textContent = box.innerHTML ? "Hide résumé" : "Show résumé";
   };
+}
+
+// --- preparing and applying ------------------------------------------------------------------------
+
+function actions(j) {
+  const a = j.application;
+  const submitted = a?.status === "submitted";
+  const buttons = [];
+  if (!a) buttons.push(`<button class="btn primary" data-act="prepare">Prepare application</button>`);
+  else if (!submitted) buttons.push(`<button class="btn" data-act="again">Prepare again</button>`);
+  if (j.fillable && a?.answers && !submitted && j.open) {
+    buttons.push(`<button class="btn primary" data-act="apply">Apply…</button>`,
+                 `<button class="btn" data-act="fill">Fill only, don't submit</button>`);
+  }
+  let hint = "";
+  if (submitted) hint = "Submitted. Record what happens next under Progress.";
+  else if (!j.fillable) hint = `trawl can't fill ${esc(BOARDS[j.source] || j.source)} forms: apply on the <a href="${esc(j.url)}" target="_blank">posting</a> (a prepared résumé is below to upload), then record it as Applied.`;
+  else if (!a) hint = "Tailors your résumé and drafts the form (a DeepSeek call), so you can check both before applying.";
+  else if (!a.answers) hint = "trawl couldn't read this form: apply on the posting and record it as Applied.";
+  else hint = "Apply opens Chrome and fills the form; you finish and check it there, then approve here.";
+  return `<section><h2>Apply</h2>
+    ${buttons.length ? `<div class="actions" style="margin-top:0">${buttons.join("")}</div>` : ""}
+    <div class="hint">${hint}</div><div id="task"></div></section>`;
+}
+
+async function act(j, what, button) {
+  button.disabled = true;
+  const [path, body] = { prepare: ["prepare", {}], again: ["prepare", { again: true }],
+                         apply: ["apply", { submit: true }], fill: ["apply", { submit: false }] }[what];
+  try {
+    const t = await api(`/api/jobs/${j.id}/${path}`, { method: "POST", body: JSON.stringify(body) });
+    follow(t.id, j.id);
+  } catch (e) { alert(e.message); button.disabled = false; }
+}
+
+// Follow a task until it ends, showing it while its job is open; a prompt waiting elsewhere shows in the nav
+async function follow(taskId, jobId) {
+  if (state.following[jobId] === taskId) return;
+  state.following[jobId] = taskId;
+  let seen = "";
+  while (state.following[jobId] === taskId) {
+    let t;
+    try { t = await api(`/api/tasks/${taskId}`); } catch { break; }
+    const now = JSON.stringify(t);
+    if (now !== seen && state.selected === jobId) renderTask(t);
+    seen = now;
+    waiting(t.state === "waiting" && state.selected !== jobId ? jobId : null, jobId);
+    if (t.state !== "running" && t.state !== "waiting") {
+      delete state.following[jobId];
+      state.last[jobId] = t;
+      if (state.selected === jobId) await refresh(jobId);
+      return;
+    }
+    await new Promise(r => setTimeout(r, 800));
+  }
+}
+
+function waiting(jobId, forJob) {
+  const foot = document.getElementById("nav-foot");
+  if (jobId) foot.innerHTML = `<a href="#/jobs/${jobId}">● #${jobId} is waiting for you</a>`;
+  else if (foot.dataset.job == forJob) foot.innerHTML = "";
+  foot.dataset.job = jobId || "";
+}
+
+function renderTask(t) {
+  const box = document.getElementById("task");
+  if (!box) return;
+  const kind = t.kind === "prepare" ? "Preparing" : "Applying";
+  const status = { running: "working…", waiting: "waiting for you", done: "done", failed: "failed" }[t.state];
+  box.innerHTML = `<div class="task ${t.state}">
+    <div class="task-head">${kind} · ${status}</div>
+    ${t.messages.length ? `<pre class="log">${esc(t.messages.join("\n"))}</pre>` : ""}
+    ${t.prompt ? `<div class="prompt"><div>${esc(t.prompt.text)}</div><div class="actions">
+      ${t.prompt.choices.map((c, i) => `<button class="btn ${i === 0 ? "primary" : ""}" data-reply="${esc(c.reply)}">${esc(c.label)}</button>`).join("")}
+      </div></div>` : ""}
+    ${t.error ? `<div class="task-error">${esc(t.error)}</div>` : ""}
+  </div>`;
+  const log = box.querySelector(".log");
+  if (log) log.scrollTop = log.scrollHeight;
+  const busy = t.state === "running" || t.state === "waiting";  // one task per job: the server would refuse
+  document.querySelectorAll("[data-act]").forEach(x => { x.disabled = busy; });
+  box.querySelectorAll("[data-reply]").forEach(b => b.onclick = async () => {
+    box.querySelectorAll("[data-reply]").forEach(x => { x.disabled = true; });
+    try { await api(`/api/tasks/${t.id}/reply`, { method: "POST", body: JSON.stringify({ reply: b.dataset.reply }) }); }
+    catch (e) { alert(e.message); }
+  });
 }
 
 function application(j) {

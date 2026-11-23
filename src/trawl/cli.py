@@ -22,9 +22,9 @@ from .decide import Criteria
 from .extract import new_client
 from .match import load_resume, resume_path
 from .models import Posting
-from .process import prepare, process, redecide, tailor_new
+from .process import prepare_one, process, redecide, tailor_new
 from .store import Store
-from .tailor import Compiler, Resume, finish, load_bank, parse, source_hash, xelatex
+from .tailor import Compiler, Resume, load_bank, parse, source_hash, xelatex
 
 USER_AGENT = "trawl/0.1 (+https://github.com/yx-yan/trawl)"
 
@@ -81,23 +81,21 @@ def tailor_ids(store: Store, settings: Settings, http: httpx.Client, ids: list[i
     loaded = load_tailoring(settings)
     if loaded is None:
         sys.exit(1)
-    resume, rhash, compile_tex = loaded
     profile = load_profile(settings)
-    client = None
+    clients: list = []
+
+    def client():  # noqa: ANN202 - one model client, made only if something needs tailoring
+        clients[:] = clients or [new_client()]
+        return clients[0]
+
     for pid in ids:
         p = store.posting(pid)
         if p is None:
             print(f"#{pid}: no such posting", file=sys.stderr)
             continue
-        app = None if again else store.application(pid, rhash)
-        if app is None:
-            client = client or new_client()
-            (t, usage), answers, note = prepare(client, resume, p, http, profile)
-            if note:
-                print(f"#{pid}: form: {note}", file=sys.stderr)
-            r = finish(resume, compile_tex, t, usage, p.title)
-            store.save_application(pid, rhash, r.record(), r.tex, r.pdf, answers)
-            app = store.application(pid, rhash)
+        app, note = prepare_one(store, client, loaded, profile, http, pid, again=again)
+        if note:
+            print(f"#{pid}: form: {note}", file=sys.stderr)
         folder = out / f"{pid}-{_slug(p.company)}"
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "resume.pdf").write_bytes(app.resume_pdf)
