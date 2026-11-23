@@ -105,6 +105,12 @@ def _approve_and_submit(store: Store, posting_id: int, source_hash: str, page, b
     while True:
         reply = ask("\nFinish the form in Chrome and check every field. "
                     "Type 'submit' to send it, or press Enter to stop: ").strip().lower()
+        # the person may have submitted it in the page, or closed the window, while trawl waited
+        if fill.closed(page):
+            return _after_close(store, posting_id, source_hash, ask, say)
+        if fill.confirmed(fill.signals(page, board)):
+            return _submitted(store, posting_id, source_hash, page, folder, say, confirmed_by="page",
+                              via="the browser")
         if reply != "submit":
             store.log(posting_id, "stopped")
             say("Stopped; nothing submitted.")
@@ -134,11 +140,30 @@ def _approve_and_submit(store: Store, posting_id: int, source_hash: str, page, b
                 say("Not marked as submitted. Fix it in Chrome and type 'submit' again, or stop.")
                 continue
             confirmed_by = "you"
-        shot = _screenshot(page, folder, "submitted")
+        return _submitted(store, posting_id, source_hash, page, folder, say, confirmed_by=confirmed_by)
+
+
+def _submitted(store: Store, posting_id: int, source_hash: str, page, folder: Path,  # noqa: ANN001
+               say: Callable[[str], None], *, confirmed_by: str, via: str = "trawl") -> str:
+    shot = _screenshot(page, folder, "submitted")
+    store.mark_submitted(posting_id, source_hash)
+    store.log(posting_id, "submitted", confirmed_by=confirmed_by, via=via, screenshot=str(shot))
+    say(f"Submitted{' (in the browser)' if via != 'trawl' else ''}. Screenshots in {folder}")
+    return "submitted"
+
+
+def _after_close(store: Store, posting_id: int, source_hash: str, ask: Callable[[str], str],
+                 say: Callable[[str], None]) -> str:
+    seen = ask("The browser was closed. Did you submit the application in it, "
+               "and did the page say so? [y/N] ")
+    if seen.strip().lower() in ("y", "yes"):
         store.mark_submitted(posting_id, source_hash)
-        store.log(posting_id, "submitted", confirmed_by=confirmed_by, screenshot=str(shot))
-        say(f"Submitted. Screenshots in {folder}")
+        store.log(posting_id, "submitted", confirmed_by="you", via="the browser")
+        say("Marked as submitted.")
         return "submitted"
+    store.log(posting_id, "browser_closed")
+    say("The browser was closed; nothing submitted by trawl.")
+    return "stopped"
 
 
 def _screenshot(page, folder: Path, name: str) -> Path:  # noqa: ANN001

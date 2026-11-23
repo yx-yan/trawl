@@ -238,9 +238,14 @@ class Result:
     errors: list[str] = field(default_factory=list)
 
 
+def confirmed(now: dict) -> bool:
+    """The page says the application went in: it moved to a confirmation, or the form gave way to thanks."""
+    return now["confirmation_url"] or (now["thanks"] and not now["form"])
+
+
 def outcome(before: dict, now: dict) -> Result:
     """Where an application stands after Submit, from what changed on the page."""
-    if now["confirmation_url"] or (now["thanks"] and not now["form"]):
+    if confirmed(now):
         return Result("confirmed")
     if now["code_input"] or (now["code_text"] and not before["code_text"]):
         return Result("code")
@@ -287,6 +292,15 @@ def wait_outcome(page: Page, board: Board, before: dict, wait_s: float, *,
     if now.get("form") and now.get("invalid"):
         return Result("errors", now["invalid"])
     return Result("unknown")
+
+
+def closed(page: Page) -> bool:
+    """Whether the person closed the window (or the browser): the page no longer answers."""
+    try:
+        page.evaluate("1")
+    except Exception:  # noqa: BLE001 - playwright's TargetClosedError, whatever closed it
+        return True
+    return False
 
 
 def launch(playwright, profile_dir: Path):  # noqa: ANN001, ANN201 - playwright types are optional
