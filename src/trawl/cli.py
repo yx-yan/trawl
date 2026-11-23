@@ -163,6 +163,8 @@ def main(argv: list[str] | None = None) -> None:
     g = sub.add_parser("gaps", help="skills eligible jobs ask for that the résumé doesn't show")
     g.add_argument("--send", action="store_true", help="send to Telegram instead of printing")
     sub.add_parser("run", help="collect, process, then digest (what cron runs)")
+    w = sub.add_parser("where", help="where else to apply for jobs MyCareersFuture won't take you for")
+    w.add_argument("ids", nargs="*", type=int, help="posting ids (default: MCF jobs to look up)")
     a = sub.add_parser("apply", help="fill a form in Chrome; submit once you approve")
     a.add_argument("id", type=int, help="the posting id (#id in the digest)")
     a.add_argument("--no-submit", action="store_true", help="fill the form to look at; never submit")
@@ -188,6 +190,9 @@ def main(argv: list[str] | None = None) -> None:
     store = Store.connect(settings.database_url)
     if args.command == "apply":
         apply_command(store, settings, args)
+        return
+    if args.command == "where":
+        where_command(store, args.ids)
         return
     criteria = Criteria.load(settings.criteria_path)
     if not settings.criteria_path.is_file():
@@ -223,6 +228,20 @@ def main(argv: list[str] | None = None) -> None:
             digest.send_telegram(text, settings.telegram_token, settings.telegram_chat_id)
         else:
             print(text)
+
+
+def where_command(store: Store, ids: list[int]) -> None:
+    from . import where
+
+    ids = ids or store.without_leads()
+    with where.client() as http:
+        for pid in ids:
+            p = store.posting(pid)
+            found = where.find(store, http, pid)
+            direct = [lead for lead in found if lead["kind"] != "search"]
+            print(f"#{pid} {p.company}: {p.title}")
+            for lead in direct or [{"label": "nothing found beyond a search", "url": ""}]:
+                print(f"  {'✓' if lead.get('fillable') else '•'} {lead['label']} {lead['url']}")
 
 
 def apply_command(store: Store, settings: Settings, args: argparse.Namespace) -> None:

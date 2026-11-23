@@ -185,3 +185,13 @@ ul.plain li { padding: 3px 0; }
 .prompt .actions { margin-top: 8px; }
 .task-error { padding: 10px 12px; color: var(--bad); border-top: 1px solid var(--line); }
 .nav-foot a { color: var(--amber); font-weight: 600; }
+
+/* where to apply, for jobs on MyCareersFuture */
+.where { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.where-head { display: flex; gap: 10px; align-items: center; }
+.where-head .when { color: var(--faint); font-size: 11px; }
+.leads { margin-top: 8px; }
+.leads li { display: flex; gap: 8px; align-items: baseline; }
+.leads .ic { width: 14px; color: var(--faint); text-align: center; }
+.leads li.posting .ic { color: var(--good); }
+.leads li.search a { color: var(--muted); }

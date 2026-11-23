@@ -117,6 +117,15 @@ def create_app(store: Store, settings: Settings | None = None, tasks: Tasks | No
             raise HTTPException(409, "that task isn't waiting for an answer")
         return {"ok": True}
 
+    @app.post("/api/jobs/{posting_id}/leads")
+    def find_leads(posting_id: int) -> dict:
+        from .. import where
+
+        if store.posting(posting_id) is None:
+            raise HTTPException(404, "no such job")
+        with where.client() as http:
+            return {"leads": where.find(store, http, posting_id)}
+
     @app.get("/api/stats")
     def stats() -> dict:
         return queries.stats(conn)

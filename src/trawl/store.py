@@ -89,6 +89,10 @@ CREATE TABLE IF NOT EXISTS stages (
     by_trawl   BOOLEAN NOT NULL DEFAULT false  -- a submission trawl made: it can't be undone
 );
 CREATE INDEX IF NOT EXISTS stages_posting ON stages (posting_id, at);
+-- Where else to apply for a job (where.py): same job elsewhere, the company's board, its site
+ALTER TABLE postings
+    ADD COLUMN IF NOT EXISTS leads    JSONB,
+    ADD COLUMN IF NOT EXISTS leads_at TIMESTAMPTZ;
 INSERT INTO stages (posting_id, stage, at, note, by_trawl)
     SELECT posting_id, 'applied', submitted_at, '', true FROM applications a
     WHERE status = 'submitted' AND submitted_at IS NOT NULL
@@ -364,6 +368,26 @@ class Store:
                                 "VALUES (%s, %s, %s, %s) RETURNING id",
                                 (posting_id, stage, note, by_trawl)).fetchone()
         return row["id"]
+
+    def siblings(self, posting_id: int) -> list[dict]:
+        """The same job (same fingerprint) on other boards."""
+        return self.conn.execute(
+            """SELECT o.id, o.source, o.url FROM postings p JOIN postings o
+               ON o.fingerprint = p.fingerprint AND o.id <> p.id WHERE p.id = %s ORDER BY o.id""",
+            (posting_id,)).fetchall()
+
+    def save_leads(self, posting_id: int, leads: list[dict]) -> None:
+        self.conn.execute("UPDATE postings SET leads = %s, leads_at = now() WHERE id = %s",
+                          (Jsonb(leads), posting_id))
+
+    def without_leads(self, source: str = "mcf", days: int = 7) -> list[int]:
+        """Eligible, still-open jobs on a board trawl can't apply to, whose leads are missing or old."""
+        rows = self.conn.execute(
+            """SELECT id FROM postings
+               WHERE eligible AND source = %s AND last_seen > now() - interval '3 days'
+                 AND (leads_at IS NULL OR leads_at < now() - make_interval(days => %s))
+               ORDER BY (match->>'score')::int DESC NULLS LAST""", (source, days)).fetchall()
+        return [r["id"] for r in rows]
 
     def remove_stage(self, stage_id: int) -> bool:
         """Undo a stage the person recorded; one trawl recorded for a submission it made stays."""

@@ -23,7 +23,8 @@ SELECT DISTINCT ON (p.fingerprint)
        p.id, p.source, p.company, p.title, p.url, p.location, p.track, p.flags,
        (p.match->>'score')::int AS score, p.match->'strengths' AS strengths, p.match->'gaps' AS gaps,
        p.first_seen, p.last_seen, p.last_seen > now() - interval '{OPEN_DAYS} days' AS open,
-       a.status AS app_status, a.created_at AS prepared_at, st.stage, st.at AS stage_at
+       a.status AS app_status, a.created_at AS prepared_at, st.stage, st.at AS stage_at,
+       coalesce(jsonb_path_exists(p.leads, '$[*] ? (@.kind != "search")'), false) AS has_leads
 FROM postings p
 LEFT JOIN LATERAL (SELECT status, created_at FROM applications WHERE posting_id = p.id
                    ORDER BY created_at DESC LIMIT 1) a ON true
@@ -54,7 +55,7 @@ def job(conn: psycopg.Connection, posting_id: int) -> dict[str, Any] | None:
     p = conn.execute(
         """SELECT id, source, external_id, company, title, url, location, track, flags, reasons, match,
                   job_facts, first_seen, last_seen, last_seen > now() - %s * interval '1 day' AS open,
-                  posted_at, eligible
+                  posted_at, eligible, leads, leads_at
            FROM postings WHERE id = %s""", (OPEN_DAYS, posting_id)).fetchone()
     if p is None:
         return None

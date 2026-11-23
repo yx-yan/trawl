@@ -108,7 +108,8 @@ function renderRows() {
     <div class="row ${j.id === state.selected ? "on" : ""} ${j.open ? "" : "closed"}" data-id="${j.id}">
       ${scoreBox(j.score)}
       <div class="what">
-        <div class="company">${esc(company(j.company))} ${j.track === "fde" ? '<span class="tag">FDE</span>' : ""}</div>
+        <div class="company">${esc(company(j.company))} ${j.track === "fde" ? '<span class="tag">FDE</span>' : ""}
+          ${j.has_leads ? '<span class="tag" title="Found where to apply">↗ lead</span>' : ""}</div>
         <div class="title">${esc(j.title)}</div>
       </div>
       <div class="meta">${pill(j.status)}<span class="when">${esc(BOARDS[j.source] || j.source)} · ${fmtDate(j.first_seen)}</span></div>
@@ -177,6 +178,13 @@ async function showJob(id) {
   });
   $d.querySelectorAll(".shots img").forEach(img => img.onclick = () => lightbox(img.src));
   $d.querySelectorAll("[data-act]").forEach(b => b.onclick = () => act(j, b.dataset.act, b));
+  const find = document.getElementById("find");
+  if (find) find.onclick = async () => {
+    find.disabled = true;
+    find.textContent = "Looking…";
+    try { await api(`/api/jobs/${j.id}/leads`, { method: "POST" }); await refresh(j.id); }
+    catch (e) { alert(e.message); find.disabled = false; find.textContent = "Find where to apply"; }
+  };
   if (j.task) follow(j.task, j.id);
   else if (state.last[j.id]) renderTask(state.last[j.id]);
   const toggle = document.getElementById("show-pdf");
@@ -201,13 +209,27 @@ function actions(j) {
   }
   let hint = "";
   if (submitted) hint = "Submitted. Record what happens next under Progress.";
+  else if (j.source === "mcf") hint = `MyCareersFuture takes applications only from Singapore citizens and PRs, but the job can be applied to elsewhere: on the company's own site, LinkedIn or by email. Look for it below, apply there (a prepared résumé is below to upload), then record it as Applied.`;
   else if (!j.fillable) hint = `trawl can't fill ${esc(BOARDS[j.source] || j.source)} forms: apply on the <a href="${esc(j.url)}" target="_blank">posting</a> (a prepared résumé is below to upload), then record it as Applied.`;
   else if (!a) hint = "Tailors your résumé and drafts the form (a DeepSeek call), so you can check both before applying.";
   else if (!a.answers) hint = "trawl couldn't read this form: apply on the posting and record it as Applied.";
   else hint = "Apply opens Chrome and fills the form; you finish and check it there, then approve here.";
   return `<section><h2>Apply</h2>
     ${buttons.length ? `<div class="actions" style="margin-top:0">${buttons.join("")}</div>` : ""}
-    <div class="hint">${hint}</div><div id="task"></div></section>`;
+    <div class="hint">${hint}</div><div id="task"></div>${j.source === "mcf" && !submitted ? where(j) : ""}</section>`;
+}
+
+function where(j) {
+  const leads = j.leads || [];
+  const icon = { posting: "★", board: "▦", careers: "◎", website: "◎", search: "⌕" };
+  return `<div class="where"><div class="where-head"><b>Where to apply</b>
+      <button class="btn" id="find">${j.leads_at ? "Look again" : "Find where to apply"}</button>
+      ${j.leads_at ? `<span class="when">looked ${fmtDate(j.leads_at)}</span>` : ""}</div>
+    ${leads.length ? `<ul class="plain leads">${leads.map(l => `<li class="${l.kind}"><span class="ic">${icon[l.kind] || "•"}</span>
+      <a href="${esc(l.url)}" target="_blank">${esc(l.label)}</a>
+      ${l.fillable ? `<span class="tag" title="Add ${esc(l.board)}: ${esc(l.slug)} to sources.toml and trawl collects it, then fills it">trawl can fill once collected</span>` : ""}</li>`).join("")}</ul>`
+      : `<div class="hint">Looks for the same job on the company's own board, its website and careers page, and gives LinkedIn and Google searches.</div>`}
+  </div>`;
 }
 
 async function act(j, what, button) {
