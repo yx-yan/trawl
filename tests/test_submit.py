@@ -81,6 +81,18 @@ def test_plan_answers_what_waited_for_the_profile_once_it_has_it() -> None:
     assert pl.left == ["GPA? (not in your profile: gpa)", "I confirm this is true (a consent: yours to give)"]
 
 
+EARLIER = PROFILE.model_copy(update={"previous_university": "Wuhan University",
+                                     "previous_degree": "Bachelor of Engineering"})
+
+
+def test_plan_adds_an_earlier_degree_behind_add_another() -> None:
+    steps = {s.field: s for s in plan([], EARLIER).steps}
+    assert steps["school--1"] == Step("school--1", "Earlier school", "choose", ["Wuhan University"],
+                                      optional=True, opens="Add another")
+    assert steps["degree--1"].value == ["Bachelor's Degree"] and steps["degree--1"].opens == "Add another"
+    assert "school--1" not in {s.field for s in plan([], PROFILE).steps}
+
+
 def test_plan_log_and_shown_never_carry_profile_values() -> None:
     pl = plan(ANSWERS, PROFILE)
     text = repr(pl.log()) + " ".join(s.shown() for s in pl.steps)
@@ -270,6 +282,14 @@ def test_fill_then_submit_once_the_person_has_consented(page, tmp_path: Path) ->
     assert got.outcome == "errors" and got.errors[0].startswith("Email: ")
     page.locator("#email").fill("ada@example.com")
     assert fill.submit(page, fill.BOARDS["greenhouse"], wait_s=3).outcome == "confirmed"
+
+
+def test_fill_clicks_add_another_for_the_earlier_degree(page, tmp_path: Path) -> None:  # noqa: ANN001
+    steps = [s for s in plan([], EARLIER).steps if s.field.endswith("--1")]
+    assert fill.fill(page, steps, tmp_path / "x.pdf").failed == []
+    chosen = page.locator("#education .select__single-value").all_inner_texts()
+    assert chosen == ["Wuhan University", "Bachelor's Degree"]  # never "Wuhan University of Technology"
+    assert page.locator('[id="school--1"]').count() == 1  # clicked once, not once per field
 
 
 def test_a_choice_no_option_matches_is_left_to_you(page, tmp_path: Path) -> None:  # noqa: ANN001

@@ -59,6 +59,11 @@ def fill(page: Page, steps: list[Step], resume: Path) -> Filled:
     out = Filled()
     for s in steps:
         el = page.locator(f'[id="{s.field}"]') if s.kind not in ("check", "pick") else None
+        if el is not None and el.count() == 0 and s.opens:  # e.g. a second education entry
+            button = page.get_by_role("button", name=s.opens)
+            if button.count():
+                button.first.click()
+                page.wait_for_timeout(300)
         if el is not None and el.count() == 0:
             if not s.optional:
                 out.failed.append(f"{s.label} (not on the page)")
