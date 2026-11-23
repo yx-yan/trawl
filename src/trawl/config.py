@@ -26,6 +26,8 @@ class Settings:
     profile_path: Path = HOME / "profile.enc"  # encrypted; the key is TRAWL_PROFILE_KEY in .env
     tailor_min_score: int = 60  # tailor a résumé for jobs that fit at least this well
     tailor_limit: int = 10  # at most this many per run
+    submit_daily_limit: int = 5  # at most this many applications submitted in 24 hours
+    browser_profile: Path = HOME / "browser"  # the Chrome profile `trawl apply` fills forms in
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -40,6 +42,8 @@ class Settings:
             profile_path=Path(os.environ.get("TRAWL_PROFILE", cls.profile_path)),
             tailor_min_score=int(os.environ.get("TRAWL_TAILOR_MIN_SCORE", cls.tailor_min_score)),
             tailor_limit=int(os.environ.get("TRAWL_TAILOR_LIMIT", cls.tailor_limit)),
+            submit_daily_limit=int(os.environ.get("TRAWL_SUBMIT_DAILY_LIMIT", cls.submit_daily_limit)),
+            browser_profile=Path(os.environ.get("TRAWL_BROWSER_PROFILE", cls.browser_profile)),
         )
 
 

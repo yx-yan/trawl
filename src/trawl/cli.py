@@ -1,5 +1,6 @@
 """Command line: `trawl collect`, `trawl process`, `trawl tailor`, `trawl digest`, `trawl run` (all
-four, for cron), `trawl gaps`, and `trawl profile` (the encrypted answers that fill forms)."""
+four, for cron), `trawl gaps`, `trawl profile` (the encrypted answers that fill forms), and
+`trawl apply` (fill a form in Chrome; submit once you approve it)."""
 
 from __future__ import annotations
 
@@ -163,6 +164,10 @@ def main(argv: list[str] | None = None) -> None:
     g = sub.add_parser("gaps", help="skills eligible jobs ask for that the résumé doesn't show")
     g.add_argument("--send", action="store_true", help="send to Telegram instead of printing")
     sub.add_parser("run", help="collect, process, tailor, then digest (what cron runs)")
+    a = sub.add_parser("apply", help="fill a job's form in Chrome; submit once you approve (Greenhouse)")
+    a.add_argument("id", type=int, help="the posting id (#id in the digest)")
+    a.add_argument("--no-submit", action="store_true", help="fill the form to look at; never submit")
+    a.add_argument("--log", action="store_true", help="show this application's audit log instead")
     pr = sub.add_parser("profile", help="the encrypted answers that fill application forms")
     pr.add_argument("action", choices=["init", "edit", "show"],
                     help="init: make a key for .env; edit: open it in $EDITOR; show: which fields are set")
@@ -174,6 +179,9 @@ def main(argv: list[str] | None = None) -> None:
         profile_command(args.action, settings)
         return
     store = Store.connect(settings.database_url)
+    if args.command == "apply":
+        apply_command(store, settings, args)
+        return
     criteria = Criteria.load(settings.criteria_path)
     if not settings.criteria_path.is_file():
         print(f"no criteria at {settings.criteria_path} (TRAWL_CRITERIA): using neutral defaults; "
@@ -208,6 +216,25 @@ def main(argv: list[str] | None = None) -> None:
             digest.send_telegram(text, settings.telegram_token, settings.telegram_chat_id)
         else:
             print(text)
+
+
+def apply_command(store: Store, settings: Settings, args: argparse.Namespace) -> None:
+    from .apply import ApplyError, run
+
+    if args.log:
+        for e in store.audit(args.id):
+            detail = json.dumps(e["detail"], ensure_ascii=False) if e["detail"] else ""
+            print(f"{e['at'].astimezone():%Y-%m-%d %H:%M:%S} {e['event']} {detail}")
+        return
+    try:
+        run(store, settings, args.id, load_profile(settings), submit=not args.no_submit)
+    except ApplyError as e:
+        sys.exit(str(e))
+    except ModuleNotFoundError as e:
+        if e.name != "playwright":
+            raise
+        sys.exit('trawl apply needs Playwright: pip install -e ".[apply]", and Chrome '
+                 "(or `playwright install chromium`)")
 
 
 def profile_command(action: str, settings: Settings) -> None:

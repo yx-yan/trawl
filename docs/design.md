@@ -161,3 +161,40 @@ candidate's own signed-in profile, so there is no form to draft.
   the source count as known: "FYP" for "Final Year Project".
 - **Nothing here submits.** Every "needs you" must be answered before M3 can submit, and M3
   submits only after the person approves that exact form.
+
+## 12. Submitting: trawl fills, the person approves, trawl clicks
+
+`trawl apply <id>` fills a Greenhouse form in Chrome and submits it when the person types
+`submit`. It runs on their own machine against the server's database (`deploy.sh tunnel`).
+
+- **No API for candidates.** Greenhouse, Lever and Ashby each have an "apply" endpoint, but it
+  takes the employer's API key. A candidate applies through the web form, so trawl drives one, the
+  way the person would.
+- **A visible browser on the person's machine.** They watch it fill, finish what trawl leaves and
+  answer any challenge the page puts up; trawl never tries to get past one. Chrome keeps its own
+  profile in `~/.trawl/browser`. The server has no browser and needs none: Playwright is the
+  optional `apply` extra.
+- **The page names fields the way the API does.** Greenhouse's form gives each field the id its API
+  lists (`question_68860631`), so the answers drafted from the API (section 11) fill the page
+  directly. Selects are react-select comboboxes; a few fields exist only on the page (phone country,
+  city, school, degree) and are filled from the profile when they're there.
+- **Never the first of several options.** A choice is the exact option, or the only one containing
+  the value. Typing "Nanyang" into the school picker lists a polytechnic before the university;
+  that is left for the person, not guessed.
+- **Approval is of the filled form.** Typing `submit` is refused while a required field is empty
+  (react-select leaves its input empty after a choice, so a combobox counts as filled when its
+  control shows one). Then trawl hashes every field's content, screenshots the page and only then
+  clicks Submit. Consents stay the person's to tick in the page.
+- **What happened is read from what changed.** The form page can carry the job description, whose
+  "thank you for your interest" proves nothing; a submission is confirmed only when the form is gone
+  or the page moved to a confirmation. New error messages, or the browser's own validation, mean the
+  form refused it; a security code is typed into the page by the person. When trawl can't tell, it
+  asks, and records who confirmed.
+- **An audit log without the values.** Every step goes into `audit_log`: which fields were planned
+  and filled, what was left, the form's hash, who confirmed. Values typed from the profile are
+  never logged or printed (`‹profile›`), and screenshots, which do show them, stay in
+  `~/.trawl/applications` on the person's machine.
+- **Limits.** One submission per job, and at most `TRAWL_SUBMIT_DAILY_LIMIT` (5) in 24 hours.
+
+Not yet: approving from Telegram (the form can only be approved where the browser is), Ashby's
+form, Lever's.
