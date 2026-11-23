@@ -43,7 +43,7 @@ def test_jobs_show_each_job_once_with_its_status(store, client: TestClient) -> N
     assert sorted((j["source"], j["status"]) for j in jobs) == [
         ("ashby", "prepared"), ("greenhouse", "new"), ("lever", "new")]  # the MCF copy folds into Greenhouse
     assert {j["id"]: j["fillable"] for j in jobs} == {ids["greenhouse"]: True, ids["ashby"]: True,
-                                                       ids["lever"]: False}
+                                                       ids["lever"]: True}
 
 
 def test_a_stage_on_the_mcf_copy_shows_that_copy(store, client: TestClient) -> None:  # noqa: ANN001

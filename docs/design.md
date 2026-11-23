@@ -136,11 +136,14 @@ after the digest with what was changed and why. `trawl tailor <id>` does the sam
 
 ## 11. Form answers: the model says what a question asks for, code answers it
 
-For jobs on Greenhouse and Ashby, trawl reads the application form and drafts every answer; the
-draft goes to Telegram after the tailored résumé, grouped as needs you / drafted / filled / skipped.
+For jobs on Greenhouse, Ashby and Lever, trawl reads the application form and drafts every answer,
+grouped as needs you / drafted / filled / skipped.
 Greenhouse publishes its forms (`?questions=true`). Ashby doesn't document an endpoint, but its job
 page reads the form from a public GraphQL endpoint and trawl reads it the same way; if that
-changes, the form is skipped and the résumé still goes out. MyCareersFuture applies through the
+changes, the form is skipped and the résumé still goes out. Lever has no endpoint for its
+questions, but its apply page is plain HTML: the standard fields are labelled inputs, and each block
+of custom questions carries its own definition as JSON in a hidden `baseTemplate` input (type, text,
+options, required), so a plain GET reads the whole form. MyCareersFuture applies through the
 candidate's own signed-in profile, so there is no form to draft.
 
 - **The model never sees personal answers.** It reads the questions, the résumé without contact
@@ -158,6 +161,13 @@ candidate's own signed-in profile, so there is no form to draft.
   has opted into in their profile (`agree_privacy`, `agree_truthful`, `agree_recording`); any other
   consent, such as terms of service, still waits.
 - **Demographic questions come only from the profile**, or the "decline" option.
+- **Some questions are decided by their words, not the model.** The model once answered "High
+  School Name" with the candidate's university, and left "Are you a Singapore citizen?" unanswered.
+  Now a yes/no question about citizenship or permanent residency is answered from the profile's
+  countries (Yes only when the question names one), and a question about high school only from
+  the high-school fields; forms drafted earlier are corrected the same way when filled. Options
+  that are bare years match a YYYY-MM date by year, and "Company website" matches the one option
+  that is the company's website ("Palantir Website").
 - **Drafts are checked like bullets.** A number or name in neither the résumé nor the posting is
   flagged on the draft (the draft can't be put back the way a bullet can). Acronyms of names in
   the source count as known: "FYP" for "Final Year Project".
@@ -215,7 +225,7 @@ person's own Chrome and not on a server.
 
 Approval stays in the terminal next to the browser, not in Telegram: the form is approved where it
 can be seen, and a phone approval would need a process waiting on the Mac to click Submit. Lever's
-form isn't filled yet; its questions are only in the apply page's HTML.
+form is filled too (section 14).
 
 ## 13. The desktop app: one database, two places
 
@@ -244,3 +254,14 @@ the server sent résumés nobody used.
   is one Chrome window to watch. A question waiting while another job is open shows in the sidebar.
 - **What the page can read is fixed.** Screenshots are served only from that job's folder, by a
   name that can't leave it.
+
+## 14. Lever
+
+Lever's apply page names its fields (no ids): a question's radios, checkboxes or `<select>` share
+its name and carry the options as values, so one step kind (`named`) chooses among them. The
+location is an autocomplete whose choice lands in a hidden field, so trawl types the city and
+picks from the suggestions. The résumé is read as it's attached and may fill other fields, so
+trawl waits for the page to settle before typing. Submit is a button behind hCaptcha: when its
+puzzle shows, trawl says so and waits for the person, as it does for an emailed code, and the
+`/thanks` page is the confirmation. Required fields known only by name, and required selects, count
+as empty until filled.

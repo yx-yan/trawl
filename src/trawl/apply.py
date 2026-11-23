@@ -54,8 +54,8 @@ def run(store: Store, settings: Settings, posting_id: int, profile: Profile | No
         raise ApplyError(f"#{posting_id}: no such posting")
     board_name = p.facts.get("board") or board_from_url(p.url)
     if p.source not in fill.BOARDS or not board_name:
-        raise ApplyError(f"#{posting_id} is on {p.source}: trawl apply fills Greenhouse and Ashby forms "
-                         f"only. Apply at {p.url}")
+        raise ApplyError(f"#{posting_id} is on {p.source}: trawl apply fills Greenhouse, Ashby and Lever "
+                         f"forms only. Apply at {p.url}")
     board = fill.BOARDS[p.source]
     if store.submitted(posting_id):
         raise ApplyError(f"#{posting_id} {p.company}: already submitted")
@@ -135,10 +135,12 @@ def _approve_and_submit(store: Store, posting_id: int, source_hash: str, page, b
         shot = _screenshot(page, folder, "approved")
         store.log(posting_id, "approved", form_sha256=digest, fields=len(state), screenshot=str(shot))
         result = fill.submit(page, board)
-        if result.outcome == "code":
-            store.log(posting_id, "security_code")
+        if result.outcome in ("code", "challenge"):  # the person's part, in the page
+            store.log(posting_id, "security_code" if result.outcome == "code" else "challenge")
             say("The board emailed you a security code: type it into the page and submit there. "
-                "Waiting up to 10 minutes.")
+                if result.outcome == "code" else
+                "The page wants to check you're human: solve it in Chrome (submit there if it asks). ")
+            say("Waiting up to 10 minutes.")
             result = fill.wait_outcome(page, board, fill.signals(page, board), 600, until=("confirmed",))
         if result.outcome == "errors":
             store.log(posting_id, "form_errors", errors=result.errors)

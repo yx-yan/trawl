@@ -16,7 +16,7 @@ import psycopg
 from ..config import HOME
 
 OPEN_DAYS = 3  # a posting the collector hasn't seen for this long has closed
-FILLABLE = ("greenhouse", "ashby")  # boards `trawl apply` can fill
+FILLABLE = ("greenhouse", "ashby", "lever")  # boards `trawl apply` can fill
 
 JOBS = f"""
 SELECT DISTINCT ON (p.fingerprint)

@@ -1,4 +1,4 @@
-"""Fill a Greenhouse or Ashby application form in a real browser, and submit it once the person says so.
+"""Fill a Greenhouse, Ashby or Lever application form in a real browser; submit once the person says so.
 
 This runs on the person's own machine, in a visible Chrome window, so they can watch, finish what
 trawl leaves (consents, files, questions only they can answer) and solve any challenge the page
@@ -12,6 +12,10 @@ Both boards give each field the id their API names it by.
   `<form>_<field>-labeled-radio-<n>` and a label holding the option; a required field's title label
   has a `_required_` class. Its page has other `type=submit` buttons (résumé uploads) before the
   real one, so each board names its Submit button.
+- Lever (jobs.lever.co/<board>/<id>/apply): fields have names, not ids; a question's radios,
+  checkboxes or <select> share its name and carry the options as values. The location is an
+  autocomplete that must be chosen from, and the résumé is read as it's attached (the page may fill
+  fields from it), so trawl waits for that before typing.
 """
 
 from __future__ import annotations
@@ -42,7 +46,14 @@ BOARDS = {
                         '#application-form button[type="submit"]'),
     "ashby": Board("https://jobs.ashbyhq.com/{board}/{job}/application",
                    "button.ashby-application-form-submit-button"),
+    "lever": Board("https://jobs.lever.co/{board}/{job}/apply", "#btn-submit"),
 }
+
+
+def element(page: Page, field: str):  # noqa: ANN201 - a playwright Locator
+    """A field by its id (Greenhouse, Ashby) or, failing that, its name in the form (Lever)."""
+    by_id = page.locator(f'[id="{field}"]')
+    return by_id if by_id.count() else page.locator(f'form [name="{field}"]').first
 
 
 def form_url(source: str, board: str, job_id: str) -> str:
@@ -58,12 +69,13 @@ class Filled:
 def fill(page: Page, steps: list[Step], resume: Path) -> Filled:
     out = Filled()
     for s in steps:
-        el = page.locator(f'[id="{s.field}"]') if s.kind not in ("check", "pick", "tick") else None
+        el = element(page, s.field) if s.kind not in ("check", "pick", "named", "tick") else None
         if el is not None and el.count() == 0 and s.opens:  # e.g. a second education entry
             button = page.get_by_role("button", name=s.opens)
             if button.count():
                 button.first.click()
                 page.wait_for_timeout(300)
+                el = element(page, s.field)  # found by id now that it's there
         if el is not None and el.count() == 0:
             if not s.optional:
                 out.failed.append(f"{s.label} (not on the page)")
@@ -82,12 +94,15 @@ def fill(page: Page, steps: list[Step], resume: Path) -> Filled:
 def _step(page: Page, s: Step, resume: Path) -> str | None:
     """Do one step; the reason it couldn't, or None."""
     if s.kind == "text":
-        el = page.locator(f'[id="{s.field}"]')
+        el = element(page, s.field)
         if el.get_attribute("role") == "combobox":  # Ashby's location: a picker that looks like text
             return _choose(page, s.field, str(s.value))
+        if el.get_attribute("id") == "location-input":  # Lever's location: pick from its suggestions
+            return _lever_location(page, el, str(s.value))
         el.fill(str(s.value))
     elif s.kind == "file":
-        page.locator(f'[id="{s.field}"]').set_input_files(str(resume))
+        element(page, s.field).set_input_files(str(resume))
+        page.wait_for_load_state("networkidle")  # Lever reads the résumé and may fill fields from it
     elif s.kind == "check":
         boxes = page.locator(f'input[type="checkbox"][name="{s.field}"]')
         labels = [boxes.nth(i).evaluate("e => e.labels && e.labels[0] ? e.labels[0].innerText : ''")
@@ -99,10 +114,31 @@ def _step(page: Page, s: Step, resume: Path) -> str | None:
             boxes.nth(i).check()
     elif s.kind == "tick":  # a lone consent checkbox: Greenhouse by its id, Ashby by its field
         box = page.locator(f'input[type="checkbox"][id="{s.field}"], '
-                           f'input[type="checkbox"][id*="_{s.field}-labeled-checkbox-"]')
+                           f'input[type="checkbox"][id*="_{s.field}-labeled-checkbox-"], '
+                           f'form input[type="checkbox"][name="{s.field}"]')
         if box.count() != 1:
             return "not a single checkbox: tick it yourself"
         box.first.check()
+    elif s.kind == "named":  # Lever: the radios, checkboxes or <select> sharing the question's name
+        inputs = page.locator(f'form [name="{s.field}"]')
+        if inputs.count() == 0:
+            return "not on the page"
+        if inputs.first.evaluate("e => e.tagName") == "SELECT":
+            options = inputs.first.locator("option").all_inner_texts()
+            chosen = []
+            for want in s.value:
+                i = match_option(options, want)
+                if i is None:
+                    return NO_MATCH
+                chosen.append(options[i])
+            inputs.first.select_option(label=chosen if len(chosen) > 1 else chosen[0])
+            return None
+        values = [inputs.nth(i).get_attribute("value") or "" for i in range(inputs.count())]
+        for want in s.value:
+            i = match_option(values, want)
+            if i is None:
+                return NO_MATCH
+            inputs.nth(i).check()
     elif s.kind == "pick":  # Ashby: radio buttons or checkboxes, one labelled input per option
         inputs = page.locator(f'input[id*="_{s.field}-labeled-"]')
         if inputs.count() == 0:
@@ -142,6 +178,23 @@ def _choose(page: Page, field_id: str, want: str) -> str | None:
     return None
 
 
+def _lever_location(page: Page, el, want: str) -> str | None:  # noqa: ANN001 - a playwright Locator
+    el.click()
+    el.fill("")
+    el.type(want[:40], delay=30)  # the suggestions load as you type
+    opts = page.locator(".dropdown-location")
+    try:
+        opts.first.wait_for(state="visible", timeout=OPTIONS_TIMEOUT_MS)
+    except Exception:  # noqa: BLE001 - playwright's TimeoutError: no suggestions
+        return NO_MATCH
+    page.wait_for_timeout(400)
+    i = match_option(opts.all_inner_texts(), want)
+    if i is None:
+        return NO_MATCH
+    opts.nth(i).click()
+    return None
+
+
 def _clear(page: Page, el) -> None:  # noqa: ANN001 - a playwright Locator
     el.fill("")
     page.keyboard.press("Escape")
@@ -154,13 +207,17 @@ EMPTY_REQUIRED_JS = """() => {
   const form = document.querySelector('#application-form') || document;
   const label = e => {
     const set = e.closest('fieldset');
+    const item = e.closest('.application-question');  // Lever: the question's own label
+    const title = item && item.querySelector('.application-label');
     const text = (set && set.querySelector('legend')) ? set.querySelector('legend').innerText
+               : title ? title.innerText
                : (e.labels && e.labels[0]) ? e.labels[0].innerText
                : (e.getAttribute('aria-label') || e.id || e.name);
-    return text.replace(/\\s+/g, ' ').replace(/\\*$/, '').trim();
+    return text.replace(/\\s+/g, ' ').replace(/[*✱]\\s*$/, '').trim();
   };
   const out = [], groups = new Set();
-  for (const e of form.querySelectorAll('input, textarea')) {
+  // fields by id (Greenhouse, Ashby) or only by name (Lever), selects included
+  for (const e of form.querySelectorAll('input, textarea, select')) {
     if (['hidden', 'search', 'file', 'submit', 'button'].includes(e.type)) continue;
     if (!(e.required || e.getAttribute('aria-required') === 'true')) continue;
     if (e.type === 'checkbox' || e.type === 'radio') {
@@ -171,7 +228,7 @@ EMPTY_REQUIRED_JS = """() => {
     } else if (e.getAttribute('role') === 'combobox') {
       const ctl = e.closest('[class*="control"]');
       if (!(ctl && ctl.querySelector('[class*="single-value"], [class*="multi-value"]'))) out.push(label(e));
-    } else if (e.id && !e.value.trim()) {
+    } else if ((e.id || e.name) && !String(e.value).trim()) {
       out.push(label(e));
     }
   }
@@ -194,8 +251,8 @@ EMPTY_REQUIRED_JS = """() => {
 # Everything the person is about to approve, to hash: each field and what's in it.
 FORM_STATE_JS = """() => {
   const form = document.querySelector('#application-form') || document;
-  return [...form.querySelectorAll('input, textarea')]
-    .filter(e => (e.id || e.name) && !(e.name || '').startsWith('g-recaptcha')).map(e => {
+  return [...form.querySelectorAll('input, textarea, select')]
+    .filter(e => (e.id || e.name) && !/^(g-recaptcha|h-captcha)/.test(e.name || '')).map(e => {
     let v = e.value;
     if (e.type === 'checkbox' || e.type === 'radio') v = e.checked;
     else if (e.type === 'file') v = [...(e.files || [])].map(f => f.name + ':' + f.size).join(',');
@@ -216,12 +273,16 @@ SIGNALS_JS = """(submit) => {
   const text = document.body.innerText;
   const button = document.querySelector(submit);
   return {
-    confirmation_url: /confirmation/i.test(location.href),
+    confirmation_url: /confirmation|\\/thanks\\b/i.test(location.href),
     form: !!(button && button.offsetParent !== null),
     thanks: /thank you for (applying|your (application|interest))/i.test(text)
          || /application (has been |was )?(successfully )?(submitted|received)/i.test(text),
     code_input: !!document.querySelector('input[id*="security" i], input[name*="security" i]'),
     code_text: /security code/i.test(text),
+    // a human check's puzzle in view (hCaptcha on Lever, reCAPTCHA): the person solves it in the page
+    challenge: [...document.querySelectorAll('iframe')].some(f =>
+      /hcaptcha\\.com.*challenge|recaptcha\\/.*\\/bframe/.test(f.src)
+      && f.getBoundingClientRect().height > 100 && getComputedStyle(f).visibility !== 'hidden'),
     errors: [...new Set([...document.querySelectorAll('[class*="error"], [role="alert"]')]
       .map(e => e.innerText.trim()).filter(t => t && t.length < 200))].slice(0, 10),
     // the browser's own checks (a required box, an email's format), which stop a plain form's Submit
@@ -235,7 +296,7 @@ SIGNALS_JS = """(submit) => {
   };
 }"""
 
-Outcome = Literal["confirmed", "code", "errors", "pending", "unknown"]
+Outcome = Literal["confirmed", "code", "challenge", "errors", "pending", "unknown"]
 
 
 @dataclass
@@ -255,6 +316,8 @@ def outcome(before: dict, now: dict) -> Result:
         return Result("confirmed")
     if now["code_input"] or (now["code_text"] and not before["code_text"]):
         return Result("code")
+    if now.get("challenge"):
+        return Result("challenge")
     new = [e for e in now["errors"] if e not in before["errors"]]
     if new:
         return Result("errors", new)
@@ -304,7 +367,7 @@ def submit(page: Page, board: Board, wait_s: float = 20) -> Result:
 
 
 def wait_outcome(page: Page, board: Board, before: dict, wait_s: float, *,
-                 until: tuple[str, ...] = ("confirmed", "code", "errors")) -> Result:
+                 until: tuple[str, ...] = ("confirmed", "code", "challenge", "errors")) -> Result:
     deadline = time.monotonic() + wait_s
     result, now = Result("pending"), {}
     while time.monotonic() < deadline:
