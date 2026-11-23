@@ -191,8 +191,11 @@ candidate's own signed-in profile, so there is no form to draft.
   clicks Submit. Consents stay the person's to tick in the page.
 - **What happened is read from what changed.** The form page can carry the job description, whose
   "thank you for your interest" proves nothing; a submission is confirmed only when the form is gone
-  or the page moved to a confirmation. New error messages, or the browser's own validation, mean the
-  form refused it; a security code is typed into the page by the person. When trawl can't tell, it
+  or the page moved to a confirmation. New error messages mean the form refused it. The browser's
+  own validation doesn't: Greenhouse marks every box of a checkbox group required and submits from
+  script past it, so on the first real submission the unticked boxes read as a refusal while the
+  page was asking for the emailed code. Those checks now only explain a Submit after which nothing
+  happened; a security code is typed into the page by the person. When trawl can't tell, it
   asks, and records who confirmed.
 - **An audit log without the values.** Every step goes into `audit_log`: which fields were planned
   and filled, what was left, the form's hash, who confirmed. Values typed from the profile are

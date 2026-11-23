@@ -149,8 +149,8 @@ def test_outcome_reads_what_changed_after_submit() -> None:
     old = sig(errors=["an old banner"])
     got = fill.outcome(old, sig(errors=["an old banner", "Email is required"]))
     assert (got.outcome, got.errors) == ("errors", ["Email is required"])
-    got = fill.outcome(sig(), sig(invalid=["Email: Please include an '@'"]))
-    assert (got.outcome, got.errors) == ("errors", ["Email: Please include an '@'"])
+    # the browser's own checks alone prove nothing: Greenhouse submits from script, past them
+    assert fill.outcome(sig(), sig(invalid=["Email: Please include an '@'"])).outcome == "pending"
 
 
 def test_resume_name() -> None:
@@ -418,3 +418,22 @@ def test_ashby_fill_then_submit_with_the_real_button(ashby_page, tmp_path: Path)
 def test_ashby_empty_required_sees_radios_and_files(ashby_page) -> None:  # noqa: ANN001
     assert fill.empty_required(ashby_page) == ["Name", "Resume", "Are you authorized to work in Singapore?",
                                                "Graduation season?", "I confirm the information is true"]
+
+
+SCRIPTED = """<form id="application-form">
+  <fieldset><legend>Which cohort?</legend>
+    <input type="checkbox" name="cohort[]" id="a" required checked><label for="a">January to June</label>
+    <input type="checkbox" name="cohort[]" id="b" required><label for="b">June to August</label>
+  </fieldset>
+  <button type="submit" onclick="event.preventDefault(); setTimeout(() => { document.body.innerHTML =
+    '<p>Enter the security code we emailed you</p><input id=security_code>' }, 800)">Submit</button>
+</form>"""
+
+
+def test_a_submit_by_script_is_not_refused_for_the_browsers_own_checks(page) -> None:  # noqa: ANN001
+    """Greenhouse marks every box of a checkbox group required and submits from script, past the
+    browser's checks: the unticked boxes once read as a refusal while the page was asking for the
+    emailed security code."""
+    page.set_content(SCRIPTED)
+    assert fill.empty_required(page) == []
+    assert fill.submit(page, fill.BOARDS["greenhouse"], wait_s=4).outcome == "code"
