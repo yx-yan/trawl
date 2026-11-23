@@ -216,3 +216,26 @@ person's own Chrome and not on a server.
 Approval stays in the terminal next to the browser, not in Telegram: the form is approved where it
 can be seen, and a phone approval would need a process waiting on the Mac to click Submit. Lever's
 form isn't filled yet; its questions are only in the apply page's HTML.
+
+## 13. The desktop app: one database, two places
+
+Collecting has to run while the laptop is shut, and applying has to run where a person can watch a
+browser, so the work is split: the server collects, judges, scores and sends the digest every day;
+the Mac tailors the résumé for the jobs the person picks and applies. Tailoring every good fit on
+the server sent résumés nobody used.
+
+- **No copy of the data.** The app opens `ssh -L` to the server's Postgres for as long as it runs
+  (`TRAWL_SSH_HOST`; BatchMode, so a missing key fails instead of waiting for a password) and closes
+  it on exit. There is nothing to sync.
+- **A local page in a native window.** FastAPI on 127.0.0.1 and plain HTML/JS, shown in a pywebview
+  window; `macos/build.sh` wraps it in `trawl.app` with a small launcher that embeds the checkout's
+  Python, so the Dock shows trawl, and a `git pull` takes effect on the next start.
+- **Stages record where an application stands.** `stages` holds applied, interview, offer, rejected,
+  withdrawn and skipped, from either side: trawl adds "applied" when it submits (that one can't be
+  undone from the app, since the submission happened), and the person records what happened
+  elsewhere, MyCareersFuture applications included. A job's status is its latest stage, else
+  "prepared" with a tailored application, else "new".
+- **Jobs, not postings.** As in the digest, a job posted on two boards shows once, and the funnel
+  counts fingerprints, so one role on Greenhouse and MyCareersFuture is one job applied to.
+- **What the page can read is fixed.** Screenshots are served only from that job's folder, by a
+  name that can't leave it.
