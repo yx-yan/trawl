@@ -21,8 +21,8 @@ PROFILE = Profile(legal_first_name="Ada", legal_last_name="Lovelace", email="ada
 
 
 def ans(qid: str, label: str, status: str, value=None, source: str = "", note: str = "",  # noqa: ANN001
-        type_: str = "text") -> dict:
-    return {"question": {"id": qid, "label": label, "required": True, "type": type_, "options": [],
+        type_: str = "text", options: list[str] | None = None) -> dict:
+    return {"question": {"id": qid, "label": label, "required": True, "type": type_, "options": options or [],
                          "demographic": False, "description": ""},
             "status": status, "value": value, "source": source, "note": note}
 
@@ -62,6 +62,23 @@ def test_plan_fills_from_the_profile_and_leaves_the_rest() -> None:
     assert "question_6" not in steps
     assert pl.left == ["I confirm this is true (a consent: yours to give)",
                        "Salary? (not in your profile: salary_expectation)"]
+
+
+def test_plan_answers_what_waited_for_the_profile_once_it_has_it() -> None:
+    waiting = [
+        ans("question_7", "Current employer?", "needs_you", note="not in your profile: current_employer"),
+        ans("question_8", "How did you hear?", "needs_you", note="not in your profile: how_heard",
+            type_="select", options=["LinkedIn", "Company website"]),
+        ans("question_9", "GPA?", "needs_you", note="not in your profile: gpa"),
+        ans("question_4", "I confirm this is true", "needs_you", note="a consent: yours to give"),
+    ]
+    prof = PROFILE.model_copy(update={"current_employer": "Example Co", "how_heard": "Company website"})
+    pl = plan(waiting, prof)
+    steps = {s.field: s for s in pl.steps}
+    assert steps["question_7"] == Step("question_7", "Current employer?", "text", "Example Co", secret=True)
+    assert steps["question_8"].value == ["Company website"]
+    # still missing, and consents are never the profile's
+    assert pl.left == ["GPA? (not in your profile: gpa)", "I confirm this is true (a consent: yours to give)"]
 
 
 def test_plan_log_and_shown_never_carry_profile_values() -> None:
