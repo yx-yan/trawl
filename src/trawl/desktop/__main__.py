@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import signal
 import socket
 import subprocess
 import sys
@@ -42,15 +41,19 @@ def wait_for(port: int, timeout: float, proc: subprocess.Popen | None = None) ->
 
 
 class Tunnel:
-    """`ssh -N -L` to the server's Postgres, closed with the app. BatchMode: an app has no terminal
-    to type a password into, so it fails instead of hanging."""
+    """`ssh -L` to the server's Postgres, closed with the app. BatchMode: an app has no terminal to
+    type a password into, so it fails instead of hanging.
+
+    Quitting the window (⌘Q) or a kill ends the process without running any Python, so nothing here
+    could close ssh. Instead ssh runs `cat` on the server, reading a pipe only this process holds:
+    however the app ends, the pipe closes, `cat` ends and ssh with it."""
 
     def __init__(self, host: str) -> None:
         self.port = free_port()
         self.proc = subprocess.Popen(
-            ["ssh", "-N", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes",
-             "-o", "ServerAliveInterval=30", "-L", f"{self.port}:127.0.0.1:5432", host],
-            stdin=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+            ["ssh", "-T", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes",
+             "-o", "ServerAliveInterval=30", "-L", f"{self.port}:127.0.0.1:5432", host, "cat"],
+            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         if not wait_for(self.port, 20, self.proc):
             self.close()
             raise RuntimeError(f"can't reach the database through ssh {host}: "
@@ -70,7 +73,6 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--port", type=int, default=0, help="port for the page (default: any free one)")
     args = parser.parse_args(argv)
 
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))  # so a kill still closes the tunnel
     load_dotenv(REPO / ".env")  # opened from Finder, the working directory is /
     os.chdir(REPO)
     settings = Settings.from_env()

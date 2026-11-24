@@ -255,7 +255,8 @@ the server sent résumés nobody used.
 
 - **No copy of the data.** The app opens `ssh -L` to the server's Postgres for as long as it runs
   (`TRAWL_SSH_HOST`; BatchMode, so a missing key fails instead of waiting for a password) and closes
-  it on exit. There is nothing to sync.
+  it on exit: ssh reads a pipe only the app holds, so it ends with the app even after ⌘Q or a kill,
+  which run no cleanup. There is nothing to sync.
 - **A local page in a native window.** FastAPI on 127.0.0.1 and plain HTML/JS, shown in a pywebview
   window; `macos/build.sh` wraps it in `trawl.app` with a small launcher that embeds the checkout's
   Python, so the Dock shows trawl, and a `git pull` takes effect on the next start.
