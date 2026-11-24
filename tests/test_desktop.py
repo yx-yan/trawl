@@ -183,3 +183,37 @@ def test_apply_through_the_api(store, monkeypatch: pytest.MonkeyPatch) -> None: 
     assert wait(tasks, t["id"], "done")["result"] == "submitted"
     assert client.post(f"/api/tasks/{t['id']}/reply", json={"reply": "submit"}).status_code == 409
     assert client.post("/api/jobs/999999/prepare", json={}).status_code == 404
+
+
+def test_preparing_with_chosen_projects(store, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ANN001
+    ids = seed(store)
+    seen: list = []
+
+    def fake_prepare(store, settings, posting_id, task, again, projects):  # noqa: ANN001, ANN202
+        seen.append((posting_id, again, projects))
+        return "prepared"
+
+    monkeypatch.setattr(server, "prepare_work", fake_prepare)
+    tasks = Tasks()
+    client = TestClient(create_app(store, tasks=tasks))
+    t = client.post(f"/api/jobs/{ids['lever']}/prepare", json={"again": True, "projects": ["A"]}).json()
+    wait(tasks, t["id"], "done")
+    assert seen == [(ids["lever"], True, ["A"])]
+    store.mark_submitted(ids["ashby"], "h")  # what was sent must stay as it was
+    assert client.post(f"/api/jobs/{ids['ashby']}/prepare", json={"again": True}).status_code == 409
+
+
+def test_projects_to_choose_from(store, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:  # noqa: ANN001
+    from test_tailor import TEX
+
+    from trawl.config import Settings
+
+    (tmp_path / "r.tex").write_text(TEX)
+    (tmp_path / "bank.toml").write_text('[[project]]\nid = "a"\ntitle = "Alpha"\ndates = "2026"\n'
+                                        '[[project.bullet]]\nlatex = "x"\n')
+    monkeypatch.setenv("TRAWL_RESUME", str(tmp_path / "r.tex"))
+    settings = Settings(bank_path=tmp_path / "bank.toml")
+    got = TestClient(create_app(store, settings)).get("/api/projects").json()
+    assert got["most"] == 3 and [p["title"] for p in got["projects"] if p["spare"]] == ["Alpha"]
+    (tmp_path / "r.tex").unlink()
+    assert TestClient(create_app(store, settings)).get("/api/projects").json()["projects"] == []

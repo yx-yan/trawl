@@ -22,14 +22,14 @@ from dataclasses import dataclass, field
 import httpx
 
 from . import answer, forms
-from .compare import compare
+from .compare import compare, version
 from .connectors import DESCRIBE
 from .decide import Criteria, Verdict, decide, prefilter
 from .extract import Client, JobFacts, Usage, extract_with_retry, with_retry
 from .match import RISE, match
 from .profile import Profile
 from .store import Application, Pending, Store, ToTailor
-from .tailor import Compiler, Resume, Tailoring, ask, finish
+from .tailor import Compiler, Resume, Tailoring, ask, finish, with_projects
 
 WORKERS = 8
 
@@ -64,8 +64,9 @@ def _parallel[I, T](fn: Callable[[I], T], items: list[I]) -> list[tuple[I, T | E
 
 
 def process(store: Store, criteria: Criteria, http: httpx.Client, client: Client,
-            resume: tuple[str, str] | None = None) -> Stats:
-    """`resume` is (text, hash) from match.load_resume; without it, jobs are judged but not scored."""
+            resume: tuple[str, str] | None = None, bank: str = "") -> Stats:
+    """`resume` is (text, hash) from match.load_resume; without it, jobs are judged but not scored.
+    `bank` is what tailor.bank_text gives, for the comparison only: scores are the résumé's."""
     stats = Stats()
 
     def reject_by_rules(items: list[Pending]) -> list[Pending]:
@@ -131,14 +132,14 @@ def process(store: Store, criteria: Criteria, http: httpx.Client, client: Client
 
         # 5. each requirement against the résumé, for jobs still open
         compared = _parallel(lambda p: with_retry(lambda: compare(
-            client, text, company=p.company, title=p.title, description=p.description)),
-                             store.to_compare(resume_hash))
+            client, text, company=p.company, title=p.title, description=p.description, bank=bank)),
+                             store.to_compare(version(resume_hash, bank)))
         for p, result in compared:
             if isinstance(result, Exception):
                 stats.failed.append(f"{p.company}: {p.title}: compare: {result}")
                 continue
             rows, usage = result
-            store.save_requirements(p.id, rows, resume_hash)
+            store.save_requirements(p.id, rows, version(resume_hash, bank))
             stats.compared += 1
             stats.input_tokens += usage.input_tokens
             stats.output_tokens += usage.output_tokens
@@ -208,18 +209,20 @@ def prepare(client: Client, resume: Resume, p: ToTailor, http: httpx.Client | No
 
 def prepare_one(store: Store, new_client: Callable[[], Client], loaded: tuple[Resume, str, Compiler],
                 profile: Profile | None, http: httpx.Client | None, posting_id: int, *,
-                again: bool = False) -> tuple[Application, str]:
+                again: bool = False, projects: list[str] | None = None) -> tuple[Application, str]:
     """One job's tailored résumé and drafted form, made now unless this résumé already has them (or
-    `again`); returns it and why the form couldn't be drafted, if it couldn't."""
+    `again`, or the person chose its `projects`); returns it and why the form couldn't be
+    drafted, if it couldn't."""
     resume, rhash, compile_tex = loaded
     p = store.posting(posting_id)
     if p is None:
         raise ValueError(f"#{posting_id}: no such posting")
-    app = None if again else store.application(posting_id, rhash)
+    used = with_projects(resume, projects) if projects else resume
+    app = None if again or projects else store.application(posting_id, rhash)
     note = ""
     if app is None:
-        (t, usage), answers, note = prepare(new_client(), resume, p, http, profile)
-        r = finish(resume, compile_tex, t, usage, p.title)
+        (t, usage), answers, note = prepare(new_client(), used, p, http, profile)
+        r = finish(used, compile_tex, t, usage, p.title, master=resume if projects else None)
         store.save_application(posting_id, rhash, r.record(), r.tex, r.pdf, answers)
         app = store.application(posting_id, rhash)
     return app, note

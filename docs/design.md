@@ -115,7 +115,8 @@ strengths and gaps under each job.
   scores don't move: it lists up to 15 requirements (must or nice to have) and quotes the words of
   the posting and of the résumé. Code checks the quotes: a requirement the posting doesn't state is
   dropped, and a claim the résumé's words don't support goes down one step (have, partial,
-  missing). The desktop app shows it as a table per job.
+  missing). What only the bank shows is told apart, since tailoring closes that gap; scores still
+  read the résumé alone. The desktop app shows it as a table per job.
 - **Personal files stay out of this public repo.** The résumé and the criteria live in `~/.trawl`
   on each machine; `deploy/deploy.sh profile` copies them to the server.
 
@@ -143,6 +144,8 @@ after the digest with what was changed and why. `trawl tailor <id>` does the sam
   kind of job. The model picks the three projects that fit; a skill row takes only its own items and
   the bank's, each skill shows once, and a bank skill needs one of its projects on the page. A bank project is held to its
   own words like any other. What the bank marks `confirm` is listed as a warning whenever it's used.
+- **The person can choose the projects.** In the app; the model then sees only those, so all of them
+  stay and the rest is tailored as usual.
 - **The lead is cut last.** With four projects every entry was cut to a bullet or two, and the fourth, often
   the one a job asked for, never survived; so there are three, and the first loses bullets last.
 - **Tied to the résumé.** A tailored résumé is kept per job and per hash of the résumé and bank; a

@@ -85,6 +85,7 @@ async function showJobs() {
   }
   try {
     state.jobs = await api("/api/jobs");
+    state.projects ||= await api("/api/projects").catch(() => null);
   } catch (e) {
     $main.innerHTML = `<div class="error">Can't load jobs: ${esc(e.message)}</div>`;
     return;
@@ -195,6 +196,7 @@ async function showJob(id) {
     try { await api(`/api/jobs/${j.id}/leads`, { method: "POST" }); await refresh(j.id); }
     catch (e) { alert(e.message); find.disabled = false; find.textContent = "Find where to apply"; }
   };
+  watchPicker();
   if (j.task) follow(j.task, j.id);
   else if (state.last[j.id]) renderTask(state.last[j.id]);
   const toggle = document.getElementById("show-pdf");
@@ -209,7 +211,7 @@ async function showJob(id) {
 
 const KINDS = { language: "Languages", ai: "AI & ML", engineering: "Engineering", cloud: "Cloud & DevOps",
                 domain: "Domain", customers: "Customers", education: "Background" };
-const STATUS = { have: ["✓", "Have"], partial: ["◐", "Partial"], missing: ["✕", "Missing"] };
+const STATUS = { have: ["✓", "Have"], bank: ["＋", "Have, not on résumé"], partial: ["◐", "Partial"], missing: ["✕", "Missing"] };
 
 function requirements(j) {
   const rows = j.requirements;
@@ -222,7 +224,7 @@ function requirements(j) {
       <td class="st" title="${STATUS[r.status][1]}">${STATUS[r.status][0]}<span class="sr">${STATUS[r.status][1]}</span></td>
       <td title="Posting: “${esc(r.quote)}”">${esc(r.skill)}</td>
       <td>${r.must ? "Must" : '<span class="nice">Nice</span>'}</td>
-      <td class="ev">${r.evidence ? esc(r.evidence) : "–"}</td></tr>`;
+      <td class="ev">${r.evidence ? esc(r.evidence) : "–"}${r.in_bank ? ' <span class="tag">bank</span>' : ""}</td></tr>`;
   const groups = Object.entries(KINDS).map(([k, label]) => {
     const of = rows.filter(r => r.kind === k).sort((a, b) => b.must - a.must);
     return of.length ? `<tr class="kind"><th colspan="4" scope="colgroup">${label}</th></tr>${of.map(line).join("")}` : "";
@@ -231,8 +233,9 @@ function requirements(j) {
     <div class="cover" aria-hidden="true">${Object.keys(STATUS).map(s => n(s) ? `<i class="${s}" style="flex:${n(s)}"></i>` : "").join("")}</div>
     <div class="cover-key">${Object.entries(STATUS).map(([s, [icon, label]]) =>
       `<span class="${s}"><b>${icon}</b> ${label} ${n(s)}</span>`).join("")}
-      ${musts.length ? `<span class="musts">Must-haves ${musts.filter(r => r.status === "have").length} of ${musts.length}</span>` : ""}</div>
-    <table class="reqs"><thead><tr><th></th><th>Requirement</th><th>Asked</th><th>In my résumé</th></tr></thead>
+      ${musts.length ? `<span class="musts">Must-haves ${musts.filter(r => r.status === "have").length}${
+        musts.some(r => r.status === "bank") ? ` (+${musts.filter(r => r.status === "bank").length})` : ""} of ${musts.length}</span>` : ""}</div>
+    <table class="reqs"><thead><tr><th></th><th>Requirement</th><th>Asked</th><th>Evidence</th></tr></thead>
       <tbody>${groups}</tbody></table></section>`;
 }
 
@@ -257,7 +260,32 @@ function actions(j) {
   else hint = "Apply opens Chrome and fills the form; you finish and check it there, then approve here.";
   return `<section><h2>Apply</h2>
     ${buttons.length ? `<div class="actions" style="margin-top:0">${buttons.join("")}</div>` : ""}
-    <div class="hint">${hint}</div><div id="task"></div>${j.source === "mcf" && !submitted ? where(j) : ""}</section>`;
+    <div class="hint">${hint}</div><div id="task"></div>${submitted ? "" : picker(j)}${j.source === "mcf" && !submitted ? where(j) : ""}</section>`;
+}
+
+// Which projects go on the résumé: trawl's choice, or the person's
+function picker(j) {
+  const list = state.projects?.projects || [];
+  if (list.length <= (state.projects?.most || 0)) return "";
+  const now = j.application?.projects || [];
+  return `<details class="picker"><summary>Choose the projects${
+      now.length ? ` <span class="when">now: ${now.map(t => esc(t.split(":")[0])).join(", ")}${j.application.chosen ? " (your choice)" : ""}</span>` : ""}</summary>
+    ${list.map(p => `<label><input type="checkbox" value="${esc(p.title)}" ${now.includes(p.title) ? "checked" : ""}>
+      ${esc(p.title)}${p.spare ? ' <span class="tag">bank</span>' : ""}</label>`).join("")}
+    <div class="actions"><button class="btn" data-act="pick">Prepare with these</button>
+      <span class="when" id="picked"></span></div></details>`;
+}
+
+function watchPicker() {
+  const box = document.querySelector(".picker");
+  if (!box) return;
+  const update = () => {
+    const n = box.querySelectorAll("input:checked").length;
+    box.querySelectorAll("input:not(:checked)").forEach(i => { i.disabled = n >= state.projects.most; });
+    document.getElementById("picked").textContent = `${n} of up to ${state.projects.most}`;
+  };
+  box.onchange = update;
+  update();
 }
 
 function where(j) {
@@ -274,8 +302,10 @@ function where(j) {
 }
 
 async function act(j, what, button) {
+  const picked = [...document.querySelectorAll(".picker input:checked")].map(i => i.value);
+  if (what === "pick" && !picked.length) return alert("Choose at least one project.");
   button.disabled = true;
-  const [path, body] = { prepare: ["prepare", {}], again: ["prepare", { again: true }],
+  const [path, body] = { pick: ["prepare", { again: true, projects: picked }], prepare: ["prepare", {}], again: ["prepare", { again: true }],
                          apply: ["apply", { submit: true }], fill: ["apply", { submit: false }] }[what];
   try {
     const t = await api(`/api/jobs/${j.id}/${path}`, { method: "POST", body: JSON.stringify(body) });

@@ -20,6 +20,7 @@ from trawl.tailor import (
     SpareBullet,
     Tailoring,
     apply,
+    bank_text,
     edits,
     finish,
     identity,
@@ -31,6 +32,7 @@ from trawl.tailor import (
     render,
     source_hash,
     to_latex,
+    with_projects,
 )
 
 TEX = r"""% !TEX TS-program = xelatex
@@ -450,3 +452,27 @@ def test_a_skill_needs_one_of_its_projects_on_the_page() -> None:
     assert "s2: RAG [p1] left out, no project on the page shows it" in without.notes
     with_it = apply(resume, choices(entries=pick("p1", "e1", "e2"), skill_items=items))
     assert with_it.rows == {"s2": r"\textbf{ML:} PyTorch, RAG, CI"}
+
+
+def test_the_person_can_choose_the_projects() -> None:
+    master = parse(TEX, FULL)
+    mine = with_projects(master, ["Medical RAG", "Solfish: Personal AI Agent"])
+    view = prompt_view(mine)
+    assert "Medical RAG" in view and "Beta" not in view and "Final Year Project" not in view
+    # the model names only one of them: the other stays, and nothing else joins
+    t = choices(entries=pick("p1", "e2", "p2"))
+    r = finish(mine, fake_compiler(99), t, Usage(1, 1, 0.1), master=master)
+    assert r.projects == ["Medical RAG", "Solfish: Personal AI Agent"] and r.record()["chosen"]
+    assert "project left out: Final Year Project: CT Reconstruction" in r.edits
+    assert "project added: Medical RAG" in r.edits
+    assert [e.spare for e in master.sections[2].entries] == [False, False, True, True, True, True]
+    for wrong in ([], ["Nope"], ["Beta", "Beta"], ["Medical RAG", "Beta", "Gamma", "Delta"]):
+        with pytest.raises(ValueError):
+            with_projects(master, wrong)
+
+
+def test_bank_text_lists_what_the_resume_lacks() -> None:
+    text = bank_text(FULL)
+    assert "Medical RAG (Nov 2026 -- Present) · R&D | Python, FAISS" in text
+    assert "- Built retrieval with FAISS." in text and "Skills: RAG, FAISS" in text
+    assert bank_text(Bank()) == ""
