@@ -5,7 +5,8 @@
    run again with the new facts.
 3. The model reads what's left; rules turn its facts into the verdict.
 4. Eligible jobs are scored against the résumé, and scored again when the résumé changes.
-5. (`tailor_new`) The best fits about to go out in the digest get a résumé tailored to them.
+5. Their requirements are listed one by one against the résumé, on the same terms.
+6. (`tailor_new`) The best fits about to go out in the digest get a résumé tailored to them.
 
 Network and model calls run in a thread pool; all database writes stay on the calling thread.
 A posting whose call fails keeps no verdict and is retried on the next run.
@@ -21,6 +22,7 @@ from dataclasses import dataclass, field
 import httpx
 
 from . import answer, forms
+from .compare import compare
 from .connectors import DESCRIBE
 from .decide import Criteria, Verdict, decide, prefilter
 from .extract import Client, JobFacts, Usage, extract_with_retry, with_retry
@@ -38,13 +40,15 @@ class Stats:
     read: int = 0  # read by the model
     eligible: int = 0
     matched: int = 0  # eligible jobs scored against the résumé
+    compared: int = 0  # eligible jobs whose requirements were compared with it
     failed: list[str] = field(default_factory=list)
     input_tokens: int = 0
     output_tokens: int = 0
 
     def __str__(self) -> str:
         return (f"{self.rules} rejected by rules, {self.read} read by the model, {self.eligible} eligible, "
-                f"{self.matched} scored against the résumé, {len(self.failed)} failed; "
+                f"{self.matched} scored against the résumé, "
+                f"{self.compared} compared with it, {len(self.failed)} failed; "
                 f"{self.input_tokens} in / {self.output_tokens} out tokens")
 
 
@@ -122,6 +126,20 @@ def process(store: Store, criteria: Criteria, http: httpx.Client, client: Client
             rose = m.digested and old is not None and new.score - old >= RISE
             store.save_match(m.id, new.model_dump(), resume_hash, resurface=rose)
             stats.matched += 1
+            stats.input_tokens += usage.input_tokens
+            stats.output_tokens += usage.output_tokens
+
+        # 5. each requirement against the résumé, for jobs still open
+        compared = _parallel(lambda p: with_retry(lambda: compare(
+            client, text, company=p.company, title=p.title, description=p.description)),
+                             store.to_compare(resume_hash))
+        for p, result in compared:
+            if isinstance(result, Exception):
+                stats.failed.append(f"{p.company}: {p.title}: compare: {result}")
+                continue
+            rows, usage = result
+            store.save_requirements(p.id, rows, resume_hash)
+            stats.compared += 1
             stats.input_tokens += usage.input_tokens
             stats.output_tokens += usage.output_tokens
 

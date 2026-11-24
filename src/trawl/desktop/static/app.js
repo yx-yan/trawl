@@ -143,10 +143,12 @@ async function showJob(id) {
       <div class="fit">
         <span class="k">Score</span><span>${m.score ?? "not scored"}</span>
         ${m.strengths?.length ? `<span class="k">Strengths</span><span>${m.strengths.map(esc).join(", ")}</span>` : ""}
-        ${m.gaps?.length ? `<span class="k">Gaps</span><span>${m.gaps.map(esc).join(", ")}</span>` : ""}
+        ${m.gaps?.length && !j.requirements?.length ? `<span class="k">Gaps</span><span>${m.gaps.map(esc).join(", ")}</span>` : ""}
         ${m.angle ? `<span class="k">Angle</span><span>${esc(m.angle)}</span>` : ""}
       </div>
     </section>
+
+    ${requirements(j)}
 
     <section><h2>Progress</h2>
       ${j.stages.length ? `<ul class="plain stages">${j.stages.map(s => `
@@ -179,6 +181,13 @@ async function showJob(id) {
   });
   $d.querySelectorAll(".shots img").forEach(img => img.onclick = () => lightbox(img.src));
   $d.querySelectorAll("[data-act]").forEach(b => b.onclick = () => act(j, b.dataset.act, b));
+  const cmp = document.getElementById("compare");
+  if (cmp) cmp.onclick = async () => {
+    cmp.disabled = true;
+    cmp.textContent = "Comparing…";
+    try { await api(`/api/jobs/${j.id}/requirements`, { method: "POST" }); await refreshIfOpen(j.id); }
+    catch (e) { alert(e.message); cmp.disabled = false; cmp.textContent = "Compare with my résumé"; }
+  };
   const find = document.getElementById("find");
   if (find) find.onclick = async () => {
     find.disabled = true;
@@ -194,6 +203,37 @@ async function showJob(id) {
     box.innerHTML = box.innerHTML ? "" : `<iframe class="pdf" src="/api/jobs/${j.id}/resume.pdf"></iframe>`;
     toggle.textContent = box.innerHTML ? "Hide résumé" : "Show résumé";
   };
+}
+
+// --- requirements against the résumé ------------------------------------------------------------
+
+const KINDS = { language: "Languages", ai: "AI & ML", engineering: "Engineering", cloud: "Cloud & DevOps",
+                domain: "Domain", customers: "Customers", education: "Background" };
+const STATUS = { have: ["✓", "Have"], partial: ["◐", "Partial"], missing: ["✕", "Missing"] };
+
+function requirements(j) {
+  const rows = j.requirements;
+  if (!rows?.length) return `<section><h2>Requirements vs résumé</h2>
+    <div class="hint" style="margin:0 0 8px">${rows ? "No concrete requirements found in this posting." : "Not compared yet."}</div>
+    <button class="btn" id="compare">Compare with my résumé</button></section>`;
+  const n = s => rows.filter(r => r.status === s).length;
+  const musts = rows.filter(r => r.must);
+  const line = r => `<tr class="${r.status}">
+      <td class="st" title="${STATUS[r.status][1]}">${STATUS[r.status][0]}<span class="sr">${STATUS[r.status][1]}</span></td>
+      <td title="Posting: “${esc(r.quote)}”">${esc(r.skill)}</td>
+      <td>${r.must ? "Must" : '<span class="nice">Nice</span>'}</td>
+      <td class="ev">${r.evidence ? esc(r.evidence) : "–"}</td></tr>`;
+  const groups = Object.entries(KINDS).map(([k, label]) => {
+    const of = rows.filter(r => r.kind === k).sort((a, b) => b.must - a.must);
+    return of.length ? `<tr class="kind"><th colspan="4" scope="colgroup">${label}</th></tr>${of.map(line).join("")}` : "";
+  }).join("");
+  return `<section><h2>Requirements vs résumé</h2>
+    <div class="cover" aria-hidden="true">${Object.keys(STATUS).map(s => n(s) ? `<i class="${s}" style="flex:${n(s)}"></i>` : "").join("")}</div>
+    <div class="cover-key">${Object.entries(STATUS).map(([s, [icon, label]]) =>
+      `<span class="${s}"><b>${icon}</b> ${label} ${n(s)}</span>`).join("")}
+      ${musts.length ? `<span class="musts">Must-haves ${musts.filter(r => r.status === "have").length} of ${musts.length}</span>` : ""}</div>
+    <table class="reqs"><thead><tr><th></th><th>Requirement</th><th>Asked</th><th>In my résumé</th></tr></thead>
+      <tbody>${groups}</tbody></table></section>`;
 }
 
 // --- preparing and applying ------------------------------------------------------------------------
@@ -333,6 +373,10 @@ function summary(a) {
     case "skipped": return d.reason || "";
     default: return Object.keys(d).length ? JSON.stringify(d) : "";
   }
+}
+
+async function refreshIfOpen(id) {  // a slow call may finish after another job was opened
+  if (state.selected === id && document.querySelector(".jobs")) await refresh(id);
 }
 
 async function refresh(id) {

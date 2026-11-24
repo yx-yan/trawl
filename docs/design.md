@@ -111,6 +111,11 @@ strengths and gaps under each job.
   `trawl gaps` (sent every Monday) ranks gaps across the open eligible jobs, FDE jobs counting
   double: a reading of the market that says what to build next, which lands on the résumé, which
   rescores the jobs.
+- **Each requirement, with both sides quoted.** `compare.py` is a second call, apart from scoring so
+  scores don't move: it lists up to 15 requirements (must or nice to have) and quotes the words of
+  the posting and of the résumé. Code checks the quotes: a requirement the posting doesn't state is
+  dropped, and a claim the résumé's words don't support goes down one step (have, partial,
+  missing). The desktop app shows it as a table per job.
 - **Personal files stay out of this public repo.** The résumé and the criteria live in `~/.trawl`
   on each machine; `deploy/deploy.sh profile` copies them to the server.
 

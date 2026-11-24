@@ -55,7 +55,7 @@ def job(conn: psycopg.Connection, posting_id: int) -> dict[str, Any] | None:
     p = conn.execute(
         """SELECT id, source, external_id, company, title, url, location, track, flags, reasons, match,
                   job_facts, first_seen, last_seen, last_seen > now() - %s * interval '1 day' AS open,
-                  posted_at, eligible, leads, leads_at
+                  posted_at, eligible, leads, leads_at, requirements
            FROM postings WHERE id = %s""", (OPEN_DAYS, posting_id)).fetchone()
     if p is None:
         return None

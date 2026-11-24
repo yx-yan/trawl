@@ -126,12 +126,41 @@ def create_app(store: Store, settings: Settings | None = None, tasks: Tasks | No
         with where.client() as http:
             return {"leads": where.find(store, http, posting_id)}
 
+    @app.post("/api/jobs/{posting_id}/requirements")
+    def compare_requirements(posting_id: int) -> dict:
+        return {"requirements": compare_work(store, posting_id)}
+
     @app.get("/api/stats")
     def stats() -> dict:
         return queries.stats(conn)
 
     app.mount("/", StaticFiles(directory=STATIC, html=True), name="static")
     return app
+
+
+def compare_work(store: Store, posting_id: int) -> list[dict]:
+    """The job's requirements against the résumé, now (a DeepSeek call); the server does it daily."""
+    from ..compare import compare
+    from ..extract import new_client, with_retry
+    from ..match import load_resume, resume_path
+
+    p = store.posting(posting_id)
+    if p is None:
+        raise HTTPException(404, "no such job")
+    if not p.description:
+        raise HTTPException(400, "this posting has no description to read")
+    try:
+        text, resume_hash = load_resume(resume_path())
+    except OSError:
+        raise HTTPException(400, f"no résumé at {resume_path()}") from None
+    client = new_client()
+    try:
+        rows, _ = with_retry(lambda: compare(client, text, company=p.company, title=p.title,
+                                             description=p.description))
+    except Exception as e:
+        raise HTTPException(502, f"the model call failed: {e}") from e
+    store.save_requirements(posting_id, rows, resume_hash)
+    return rows
 
 
 def prepare_work(store: Store, settings: Settings, posting_id: int, task: Task, again: bool) -> str:

@@ -55,7 +55,7 @@ echo "TRAWL_SSH_HOST=user@host" >> .env  # read the server's database through ss
 .venv/bin/trawl app                      # or ./macos/build.sh once, then open trawl from Applications
 ```
 
-Jobs to do, in progress and done, each with its fit, the tailored résumé, the drafted form,
+Jobs to do, in progress and done, each with its fit, a table of its requirements against the résumé, the tailored résumé, the drafted form,
 screenshots and every step trawl took. **Prepare** tailors the résumé and drafts the form;
 **Apply** opens Chrome and fills it, and what `trawl apply` would ask in a terminal (submit? did it go
 through?) is asked on the page instead. Also record applications made elsewhere (MyCareersFuture),

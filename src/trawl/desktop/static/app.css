@@ -195,3 +195,23 @@ ul.plain li { padding: 3px 0; }
 .leads .ic { width: 14px; color: var(--faint); text-align: center; }
 .leads li.posting .ic { color: var(--good); }
 .leads li.search a { color: var(--muted); }
+
+/* each requirement against the résumé */
+.cover { display: flex; gap: 2px; height: 10px; border-radius: 5px; overflow: hidden; }
+.cover .have { background: var(--good); }
+.cover .partial { background: var(--amber); }
+.cover .missing { background: var(--bad); }
+.cover-key { display: flex; gap: 14px; margin: 6px 0 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cover-key .musts { margin-left: auto; color: var(--ink); font-weight: 600; }
+.cover-key .have b, .reqs .have .st { color: var(--good); }
+.cover-key .partial b, .reqs .partial .st { color: var(--amber); }
+.cover-key .missing b, .reqs .missing .st { color: var(--bad); }
+.reqs { width: 100%; border-collapse: collapse; }
+.reqs th { text-align: left; font-weight: 500; color: var(--faint); font-size: 11px; padding: 4px 8px 4px 0; }
+.reqs td { padding: 5px 8px 5px 0; border-top: 1px solid var(--line); vertical-align: top; }
+.reqs .kind th { padding-top: 12px; font-weight: 650; color: var(--muted); }
+.reqs .st { width: 22px; font-weight: 700; }
+.reqs td:nth-child(2) { width: 36%; font-weight: 500; }
+.reqs td:nth-child(3) { width: 52px; }
+.reqs .nice, .reqs .ev { color: var(--muted); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
