@@ -20,6 +20,8 @@ from .parsing import html_to_text
 
 PAGE = 20  # the most Workday returns per page
 MAX = 400
+# Without it Workday answers some networks (a cloud server's) with 429 Too Many Requests
+JSON = {"Accept": "application/json"}
 
 
 def _site(key: str) -> tuple[str, str]:
@@ -59,8 +61,8 @@ def fetch(http: httpx.Client, key: str) -> list[Posting]:
     postings: list[Posting] = []
     total = None
     for offset in range(0, MAX, PAGE):
-        resp = http.post(f"{api}/jobs", json={"appliedFacets": {}, "limit": PAGE, "offset": offset,
-                                              "searchText": "Singapore"})
+        resp = http.post(f"{api}/jobs", headers=JSON, json={"appliedFacets": {}, "limit": PAGE,
+                                                            "offset": offset, "searchText": "Singapore"})
         resp.raise_for_status()
         data = resp.json()
         total = data.get("total") if total is None else total
@@ -87,7 +89,7 @@ def fetch(http: httpx.Client, key: str) -> list[Posting]:
 def describe(http: httpx.Client, external_id: str, facts: dict) -> tuple[str, dict]:
     """The posting's description, and its time type (Workday's "Full time" / "Part time")."""
     _, api = _site(facts["board"])
-    resp = http.get(f"{api}{external_id}")
+    resp = http.get(f"{api}{external_id}", headers=JSON)
     resp.raise_for_status()
     info = resp.json().get("jobPostingInfo") or {}
     extra = {"employment_types": [info["timeType"]]} if info.get("timeType") else {}

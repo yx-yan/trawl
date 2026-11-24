@@ -40,6 +40,7 @@ WD_JOBS = [
 
 def workday_http(seen: list) -> httpx.Client:
     def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["accept"] == "application/json"  # a server gets 429 without it
         if request.method == "POST" and str(request.url) == f"{WD_API}/jobs":
             body = json.loads(request.content)
             seen.append(body)
