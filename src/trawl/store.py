@@ -93,6 +93,10 @@ CREATE INDEX IF NOT EXISTS stages_posting ON stages (posting_id, at);
 ALTER TABLE postings
     ADD COLUMN IF NOT EXISTS leads    JSONB,
     ADD COLUMN IF NOT EXISTS leads_at TIMESTAMPTZ;
+-- Each requirement of the job against the résumé (compare.py), by the résumé's hash
+ALTER TABLE postings
+    ADD COLUMN IF NOT EXISTS requirements      JSONB,
+    ADD COLUMN IF NOT EXISTS requirements_hash TEXT;
 INSERT INTO stages (posting_id, stage, at, note, by_trawl)
     SELECT posting_id, 'applied', submitted_at, '', true FROM applications a
     WHERE status = 'submitted' AND submitted_at IS NOT NULL
@@ -276,6 +280,22 @@ class Store:
             "UPDATE postings SET match = %s, resume_hash = %s, resurface = resurface OR %s WHERE id = %s",
             (Jsonb(match), resume_hash, resurface, posting_id),
         )
+
+    def to_compare(self, resume_hash: str) -> list[ToTailor]:
+        """Eligible, still-open postings whose requirements haven't been compared with this résumé."""
+        rows = self.conn.execute(
+            """
+            SELECT id, company, title, description, match FROM postings
+            WHERE eligible AND description <> '' AND last_seen > now() - interval '3 days'
+              AND requirements_hash IS DISTINCT FROM %s
+            """,
+            (resume_hash,),
+        ).fetchall()
+        return [ToTailor(**r) for r in rows]
+
+    def save_requirements(self, posting_id: int, requirements: list[dict], resume_hash: str) -> None:
+        self.conn.execute("UPDATE postings SET requirements = %s, requirements_hash = %s WHERE id = %s",
+                          (Jsonb(requirements), resume_hash, posting_id))
 
     def to_tailor(self, source_hash: str, min_score: int, limit: int) -> list[ToTailor]:
         """Eligible jobs about to go out in the digest (new, or back because they fit better) that
