@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 import httpx
+import pytest
 from conftest import FakeClient, job_facts
 
 from trawl import digest
@@ -12,12 +13,18 @@ from trawl.models import Posting
 from trawl.process import process, tailor_new
 from trawl.store import Application
 from trawl.tailor import (
+    Bank,
+    Bullet,
+    Project,
+    Skill,
+    SpareBullet,
     Tailoring,
     apply,
     edits,
     finish,
     identity,
     invented,
+    load_bank,
     parse,
     plain,
     prompt_view,
@@ -69,7 +76,7 @@ NTU M.Sc.\ student, focused on \textbf{LLM agents}. Background in \textbf{PyTorc
 \end{document}
 """
 
-BANK = [("Solfish", r"Added \textbf{human approval} before every write tool.")]
+BANK = Bank([SpareBullet("Solfish", r"Added \textbf{human approval} before every write tool.")])
 
 
 def choices(**overrides: object) -> Tailoring:
@@ -214,7 +221,7 @@ def test_finish_cuts_the_least_relevant_bullets_until_one_page() -> None:
 
 
 def test_source_hash_changes_with_the_bank() -> None:
-    assert source_hash(TEX, []) != source_hash(TEX, BANK)
+    assert source_hash(TEX, Bank()) != source_hash(TEX, BANK)
 
 
 def test_caption_and_send_document() -> None:
@@ -309,3 +316,137 @@ def test_the_summary_may_name_the_job() -> None:
 def test_invented_knows_acronyms_of_names_in_the_source() -> None:
     assert invented("My FYP used PyTorch.", "Final Year Project: CT, with PyTorch") == []
     assert invented("My MSc used PyTorch.", "Final Year Project: CT, with PyTorch") == ["MSc"]
+
+
+# --- projects and skills from the bank -----------------------------------------------------------
+
+
+def project(pid: str, title: str, **extra: str) -> Project:
+    bullets = [SpareBullet(title, r"Built \textbf{retrieval} with FAISS.", extra.pop("check", ""))]
+    return Project(pid, title, "Nov 2026 -- Present", "R&D", ["Python", "FAISS"], bullets, **extra)
+
+
+FULL = Bank(
+    BANK.bullets,
+    [project("rag", "Medical RAG", note="no training", check="did you?"), project("b", "Beta"),
+     project("c", "Gamma"), project("d", "Delta")],
+    [Skill("RAG"), Skill("FAISS", confirm="used it?")],
+)
+
+
+def pick(*ids: str) -> list[dict]:
+    text = {"e1": ("e1.b2", "Wrote **17 offline tests** run in GitHub Actions CI."),
+            "e2": ("e2.b1", "Built a dual-domain **PyTorch** network from 60 X-ray views.")}
+    spare = "Built **retrieval** with FAISS."
+    chosen = [(i, *text.get(i, (f"{i}.b1", spare))) for i in ids]
+    return [{"id": i, "bullets": [{"id": b, "text": words}]} for i, b, words in chosen]
+
+
+def test_the_bank_changes_nothing_until_the_model_chooses_it() -> None:
+    resume = parse(TEX, FULL)
+    assert render(resume, identity(resume)) == re.sub(r"(?m)^[ \t]*%.*\n", "", TEX)
+    view = prompt_view(resume)
+    assert "[p1] (spare) Medical RAG (Nov 2026 -- Present) · R&D | Python, FAISS" in view
+    assert "limits: no training" in view and "## Spare skills\n- RAG\n- FAISS" in view
+
+
+def test_projects_swap_in_and_out() -> None:
+    resume = parse(TEX, FULL)
+    plan = apply(resume, choices(entries=pick("p1", "e1", "p2")))
+    assert plan.order == {2: ["p1", "e1", "p2"]}
+    tex = render(resume, plan)
+    assert r"\role{R\&D \textbar\ Python, FAISS}" in tex and "Final Year Project" not in tex
+    assert tex.index("Medical RAG") < tex.index("Solfish") < tex.index("Beta")
+    done = edits(resume, plan)
+    assert done[:3] == ["project added: Medical RAG", "project added: Beta",
+                        "project left out: Final Year Project: CT Reconstruction"]
+    assert not any("p1.b1" in e or "e2.b1" in e for e in done)  # listed once, as projects
+
+
+def test_the_number_of_projects_is_bounded() -> None:
+    resume = parse(TEX, FULL)
+    assert apply(resume, choices(entries=pick("p1", "p2", "p3", "p4"))).order == {2: ["p1", "p2", "p3"]}
+    assert apply(resume, choices(entries=pick("p1"))).order == {2: ["p1", "e1", "e2"]}  # topped up
+
+
+def test_a_spare_project_is_held_to_its_own_facts() -> None:
+    resume = parse(TEX, FULL)
+    entries = [{"id": "p1", "bullets": [{"id": "p1.b1", "text": "Built **retrieval** on Kubernetes."}]}]
+    plan = apply(resume, choices(entries=entries))
+    assert plan.bullets["p1"] == [("p1.b1", r"Built \textbf{retrieval} with FAISS.")]
+    assert "Kubernetes not in the source" in plan.notes[0]
+
+
+def test_skill_rows_take_only_their_own_items_and_the_banks() -> None:
+    resume = parse(TEX, FULL)
+    plan = apply(resume, choices(skill_items=[
+        {"id": "s2", "items": ["rag", "PyTorch", "Kubernetes", "Python"]},
+        {"id": "s1", "items": ["Python", "RAG", "Shell"]}]))
+    assert plan.rows == {"s2": r"\textbf{ML:} RAG, PyTorch"}  # Python and RAG have a row already
+    assert "s2: Kubernetes not in the résumé or bank, left out" in plan.notes
+    assert r"\item \textbf{ML:} RAG, PyTorch" in render(resume, plan)
+    assert "skills, ML: +RAG, -NumPy" in edits(resume, plan)
+
+
+def test_unconfirmed_points_are_listed_when_used() -> None:
+    resume = parse(TEX, FULL)
+    t = choices(entries=pick("p1", "e1", "e2"), skill_items=[{"id": "s2", "items": ["PyTorch", "FAISS"]}])
+    assert finish(resume, fake_compiler(99), t, Usage(1, 1, 0.1)).notes == [
+        "confirm before sending, p1.b1 (Medical RAG): did you?", "confirm before sending, FAISS: used it?"]
+    plain_choice = choices(entries=pick("e1", "e2", "p2"))
+    assert finish(resume, fake_compiler(99), plain_choice, Usage(1, 1, 0.1)).notes == []
+
+
+def test_load_bank_skips_what_isnt_to_be_used(tmp_path) -> None:  # noqa: ANN001
+    path = tmp_path / "bank.toml"
+    assert load_bank(path) == Bank()
+    item = '[[project]]\nid = "{0}"\ntitle = "{0}"\ndates = "2026"\n{1}\n[[project.bullet]]\nlatex = "x"\n'
+    path.write_text(item.format("a", "") + item.format("b", "use = false")
+                    + '[[skill]]\nname = "RAG"\n[[skill]]\nname = "RL"\nuse = false\n')
+    bank = load_bank(path)
+    assert [p.id for p in bank.projects] == ["a"] and [s.name for s in bank.skills] == ["RAG"]
+    path.write_text(item.format("a", "") * 2)
+    with pytest.raises(ValueError, match="used twice"):
+        load_bank(path)
+    path.write_text('[[project]]\nid = "a"\n')
+    with pytest.raises(ValueError, match="title"):
+        load_bank(path)
+
+
+def test_accents_read_as_letters() -> None:
+    assert plain(r"a r\'esum\'e") == "a résumé"
+
+
+def test_three_projects_fit_where_four_would_not() -> None:
+    resume = parse(TEX, FULL)
+    words = [{"id": f"e1.b{i + 1}", "text": b.text} for i, b in enumerate(resume.entry("e1").bullets[:3])]
+    entries = [{"id": "e1", "bullets": words}, *pick("p1", "p2", "p3")]
+    r = finish(resume, fake_compiler(5), choices(entries=entries), Usage(1, 1, 0.1))
+    assert r.notes == ["confirm before sending, p1.b1 (Medical RAG): did you?"]
+    assert "agent loop" in r.tex and "JSONL" in r.tex and "Gamma" not in r.tex
+    # without a bank, every project on the master stays
+    plain = parse(TEX)
+    with pytest.raises(RuntimeError, match="still 2 pages"):
+        finish(plain, fake_compiler(1), choices(), Usage(1, 1, 0.1))
+
+
+def test_the_lead_is_cut_last() -> None:
+    resume = parse(TEX)
+    two = [{"id": f"e1.b{i + 1}", "text": b.text} for i, b in enumerate(resume.entry("e1").bullets[:2])]
+    resume.entry("e2").bullets.append(Bullet("e2.b2", "Ran ablations."))
+    cnn = [{"id": b.id, "text": b.text} for b in resume.entry("e2").bullets]
+    t = choices(entries=[{"id": "e1", "bullets": two}, {"id": "e2", "bullets": cnn}])
+    assert finish(resume, fake_compiler(3), t, Usage(1, 1, 0.1)).notes == ["e2.b2 cut to fit one page"]
+
+
+def test_a_skill_needs_one_of_its_projects_on_the_page() -> None:
+    bank = Bank(BANK.bullets, FULL.projects, [Skill("RAG", sources=["rag"]),
+                                              Skill("CI", sources=["Solfish"])])
+    resume = parse(TEX, bank)
+    assert "- RAG [p1]\n- CI [e1]" in prompt_view(resume)
+    items = [{"id": "s2", "items": ["PyTorch", "RAG [p1]", "CI"]}]
+    without = apply(resume, choices(entries=pick("e1", "e2", "p2"), skill_items=items))
+    assert without.rows == {"s2": r"\textbf{ML:} PyTorch, CI"}
+    assert "s2: RAG [p1] left out, no project on the page shows it" in without.notes
+    with_it = apply(resume, choices(entries=pick("p1", "e1", "e2"), skill_items=items))
+    assert with_it.rows == {"s2": r"\textbf{ML:} PyTorch, RAG, CI"}
