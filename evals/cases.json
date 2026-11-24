@@ -222,7 +222,8 @@
   "board_facts": {},
   "expect": {
    "seniority": "entry",
-   "track": "path"
+   "track": "path",
+   "graduation_to": "2027-08"
   },
   "eligible": true
  },
