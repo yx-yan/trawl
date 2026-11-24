@@ -47,6 +47,23 @@ def test_quotes_match_whole_words(quote: str, text: str, found: bool) -> None:
     assert c.quoted(quote, text) is found
 
 
+def test_what_only_the_bank_shows_is_told_apart() -> None:
+    client = FakeClient(comparisons=[{"requirements": [
+        req("Python", "You write Python", "have", "agents in Python"),
+        req("RAG", "RAG is a plus", "have", "two abstaining RAG policies"),
+        req("Docker", "Docker required", "partial", "ran Docker once")]}])
+    rows, _ = c.compare(client, RESUME, company="A", title="T", description=POSTING,
+                        bank="- Owned two abstaining RAG policies, and ran Docker once.")
+    assert [(r["status"], r.get("in_bank", False)) for r in rows] == [
+        ("have", False), ("bank", True), ("partial", True)]
+    assert "<further_material>" in client.requests[0]["messages"][0]["content"]
+
+
+def test_the_version_follows_the_resume_and_the_bank() -> None:
+    assert c.version("h", "") == "h"
+    assert len({c.version("h", ""), c.version("h", "a"), c.version("h", "b"), c.version("i", "a")}) == 4
+
+
 def test_a_long_list_is_cut() -> None:
     assert len(run(*[req(f"S{i}", "Docker required", "missing") for i in range(20)])) == c.LIMIT
 
@@ -62,6 +79,7 @@ def test_compares_each_open_job_once_per_resume(store, board_http) -> None:  # n
     assert row["requirements"][0]["skill"] == "RAG"
     assert process(store, Criteria(), board_http, client, (RESUME, "h1")).compared == 0
     assert process(store, Criteria(), board_http, client, (RESUME, "h2")).compared == 1
+    assert process(store, Criteria(), board_http, client, (RESUME, "h2"), "bank").compared == 1
     store.conn.execute("UPDATE postings SET last_seen = now() - interval '9 days'")
     assert process(store, Criteria(), board_http, client, (RESUME, "h3")).compared == 0  # closed
 

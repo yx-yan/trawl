@@ -75,6 +75,8 @@ def job(conn: psycopg.Connection, posting_id: int) -> dict[str, Any] | None:
         app["edits"] = t.get("edits", [])
         app["changes"] = (t.get("tailoring") or {}).get("changes", [])
         app["notes"] = t.get("notes", [])
+        app["projects"] = t.get("projects", [])
+        app["chosen"] = t.get("chosen", False)
     return p | {"status": status(latest), "fillable": p["source"] in FILLABLE, "application": app,
                 "stages": stages, "audit": audit, "screenshots": [s.name for s in screenshots(posting_id)]}
 

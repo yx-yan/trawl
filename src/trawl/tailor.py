@@ -15,6 +15,7 @@ suit a job better. Points the bank marks as unconfirmed are listed for the perso
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import re
 import shutil
@@ -249,7 +250,7 @@ def parse(tex: str, bank: Bank | None = None) -> Resume:
         spares = sum(b.spare for b in entry.bullets)
         entry.bullets.append(Bullet(f"{entry.id}.x{spares + 1}", spare.latex, True, spare.confirm))
     if bank.projects:
-        section = next((s for s in sections if s.kind == "entries" and "project" in s.name.lower()), None)
+        section = projects_section(resume)
         if section is None:
             raise ValueError("bank: the résumé has no projects section")
         on_page = {e.title.lower() for e in section.entries}
@@ -258,6 +259,39 @@ def parse(tex: str, bank: Bank | None = None) -> Resume:
             section.entries.append(Entry(f"p{i}", p.head, bullets, "\\end{itemize}\n\n", True,
                                          p.note, p.confirm, p.id))
     return resume
+
+
+def projects_section(resume: Resume) -> Section | None:
+    return next((s for s in resume.sections if s.kind == "entries" and "project" in s.name.lower()), None)
+
+
+def with_projects(resume: Resume, titles: list[str]) -> Resume:
+    """The résumé with exactly these projects, for the person choosing them: the model then sees no
+    others, and all of them stay on the page."""
+    section = projects_section(resume)
+    known = [e.title for e in section.entries] if section else []
+    if not 1 <= len(titles) <= PROJECTS or len(set(titles)) < len(titles):
+        raise ValueError(f"choose 1 to {PROJECTS} different projects")
+    if unknown := [t for t in titles if t not in known]:
+        raise ValueError(f"no such project: {', '.join(unknown)}")
+    chosen = copy.deepcopy(resume)
+    section = projects_section(chosen)
+    section.entries = [e for e in section.entries if e.title in titles]
+    for e in section.entries:
+        e.spare = False
+    return chosen
+
+
+def bank_text(bank: Bank) -> str:
+    """What the bank shows that the master résumé doesn't, as plain text."""
+    lines = []
+    for p in bank.projects:
+        lines.append(f"{p.title} ({p.dates}) · {p.role} | {', '.join(p.stack)}")
+        lines += [f"- {plain(b.latex)}" for b in p.bullets]
+    lines += [f"- {plain(b.latex)}" for b in bank.bullets]
+    if bank.skills:
+        lines.append("Skills: " + ", ".join(s.name for s in bank.skills))
+    return "\n".join(lines).replace("**", "")
 
 
 def _section(raw: str) -> Section:
@@ -716,20 +750,27 @@ class Result:
     notes: list[str]
     edits: list[str]
     usage: Usage
+    projects: list[str]  # on the page, in order
+    chosen: bool = False  # by the person, not the model
 
     def record(self) -> dict:
         """What's kept in the database next to the PDF, for review and evals."""
         return {"tailoring": self.tailoring.model_dump(), "notes": self.notes, "edits": self.edits,
+                "projects": self.projects, "chosen": self.chosen,
                 "usage": {"input_tokens": self.usage.input_tokens, "output_tokens": self.usage.output_tokens,
                           "seconds": round(self.usage.seconds, 2)}}
 
 
-def finish(resume: Resume, compile_tex: Compiler, t: Tailoring, usage: Usage, job_title: str = "") -> Result:
-    """Hold the model's choices to the facts, then render and fit to one page."""
+def finish(resume: Resume, compile_tex: Compiler, t: Tailoring, usage: Usage, job_title: str = "",
+           master: Resume | None = None) -> Result:
+    """Hold the model's choices to the facts, then render and fit to one page. `master` is the whole
+    résumé when `resume` is it with projects the person chose: what changed is told against it."""
     plan = apply(resume, t, job_title)
     tex, pdf = fit(resume, plan, compile_tex)
     plan.notes += unconfirmed(resume, plan)
-    return Result(tex, pdf, t, plan.notes, edits(resume, plan), usage)
+    section = projects_section(resume)
+    shown = [resume.entry(eid).title for eid in plan.order[resume.sections.index(section)]] if section else []
+    return Result(tex, pdf, t, plan.notes, edits(master or resume, plan), usage, shown, master is not None)
 
 
 def tailor(client: Client, resume: Resume, compile_tex: Compiler, *, company: str, title: str,

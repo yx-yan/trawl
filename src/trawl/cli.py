@@ -24,7 +24,7 @@ from .match import load_resume, resume_path
 from .models import Posting
 from .process import prepare_one, process, redecide, tailor_new
 from .store import Store
-from .tailor import Compiler, Resume, load_bank, parse, source_hash, xelatex
+from .tailor import Compiler, Resume, bank_text, load_bank, parse, source_hash, xelatex
 
 USER_AGENT = "trawl/0.1 (+https://github.com/yx-yan/trawl)"
 
@@ -60,6 +60,15 @@ def load_tailoring(settings: Settings) -> tuple[Resume, str, Compiler] | None:
         return None
     bank = load_bank(settings.bank_path)
     return parse(tex, bank), source_hash(tex, bank), xelatex(settings.resume_class)
+
+
+def read_bank(settings: Settings) -> str:
+    """The bank as text for the comparison, or nothing (with the reason on stderr) if it can't be read."""
+    try:
+        return bank_text(load_bank(settings.bank_path))
+    except (OSError, ValueError) as e:
+        print(f"bank: {e}: compared with the résumé alone", file=sys.stderr)
+        return ""
 
 
 def load_profile(settings: Settings) -> profiles.Profile | None:
@@ -213,7 +222,7 @@ def main(argv: list[str] | None = None) -> None:
             except OSError:
                 print(f"no résumé at {resume_path()} (TRAWL_RESUME): jobs judged but not scored",
                       file=sys.stderr)
-            print(process(store, criteria, http, new_client(), resume))
+            print(process(store, criteria, http, new_client(), resume, read_bank(settings)))
         if args.command == "tailor" and args.ids:
             tailor_ids(store, settings, http, args.ids, args.out, again=args.again)
         elif args.command == "tailor" and (loaded := load_tailoring(settings)):

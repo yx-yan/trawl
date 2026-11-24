@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from ..config import Settings
 from ..store import STAGES, Store
+from ..tailor import PROJECTS, load_bank, parse, projects_section
 from . import queries
 from .tasks import Busy, Task, Tasks
 
@@ -30,6 +31,7 @@ class NewStage(BaseModel):
 
 class Prepare(BaseModel):
     again: bool = False
+    projects: list[str] = []  # the ones the person chose; none: the model chooses
 
 
 class Apply(BaseModel):
@@ -96,8 +98,10 @@ def create_app(store: Store, settings: Settings | None = None, tasks: Tasks | No
 
     @app.post("/api/jobs/{posting_id}/prepare")
     def prepare(posting_id: int, body: Prepare) -> dict:
+        if store.submitted(posting_id):
+            raise HTTPException(409, "already submitted: preparing again would replace what was sent")
         return start(posting_id, "prepare",
-                     lambda task: prepare_work(store, settings, posting_id, task, body.again))
+                     lambda task: prepare_work(store, settings, posting_id, task, body.again, body.projects))
 
     @app.post("/api/jobs/{posting_id}/apply")
     def apply(posting_id: int, body: Apply) -> dict:
@@ -128,7 +132,11 @@ def create_app(store: Store, settings: Settings | None = None, tasks: Tasks | No
 
     @app.post("/api/jobs/{posting_id}/requirements")
     def compare_requirements(posting_id: int) -> dict:
-        return {"requirements": compare_work(store, posting_id)}
+        return {"requirements": compare_work(store, settings, posting_id)}
+
+    @app.get("/api/projects")
+    def projects() -> dict:
+        return {"most": PROJECTS, "projects": list_projects(settings)}
 
     @app.get("/api/stats")
     def stats() -> dict:
@@ -138,9 +146,21 @@ def create_app(store: Store, settings: Settings | None = None, tasks: Tasks | No
     return app
 
 
-def compare_work(store: Store, posting_id: int) -> list[dict]:
+def list_projects(settings: Settings) -> list[dict]:
+    """The résumé's and the bank's projects, to choose from; none if they can't be read."""
+    from ..match import resume_path
+
+    try:
+        section = projects_section(parse(resume_path().read_text(), load_bank(settings.bank_path)))
+    except (OSError, ValueError):
+        return []
+    return [{"title": e.title, "spare": e.spare} for e in section.entries] if section else []
+
+
+def compare_work(store: Store, settings: Settings, posting_id: int) -> list[dict]:
     """The job's requirements against the résumé, now (a DeepSeek call); the server does it daily."""
-    from ..compare import compare
+    from ..cli import read_bank
+    from ..compare import compare, version
     from ..extract import new_client, with_retry
     from ..match import load_resume, resume_path
 
@@ -153,17 +173,18 @@ def compare_work(store: Store, posting_id: int) -> list[dict]:
         text, resume_hash = load_resume(resume_path())
     except OSError:
         raise HTTPException(400, f"no résumé at {resume_path()}") from None
-    client = new_client()
+    client, bank = new_client(), read_bank(settings)
     try:
         rows, _ = with_retry(lambda: compare(client, text, company=p.company, title=p.title,
-                                             description=p.description))
+                                             description=p.description, bank=bank))
     except Exception as e:
         raise HTTPException(502, f"the model call failed: {e}") from e
-    store.save_requirements(posting_id, rows, resume_hash)
+    store.save_requirements(posting_id, rows, version(resume_hash, bank))
     return rows
 
 
-def prepare_work(store: Store, settings: Settings, posting_id: int, task: Task, again: bool) -> str:
+def prepare_work(store: Store, settings: Settings, posting_id: int, task: Task, again: bool,
+                 projects: list[str] | None = None) -> str:
     """Tailor the résumé and draft the form, as `trawl tailor <id>` does."""
     import httpx
 
@@ -179,7 +200,7 @@ def prepare_work(store: Store, settings: Settings, posting_id: int, task: Task, 
     task.say("Tailoring the résumé and drafting the form…")
     with httpx.Client(timeout=30, headers={"User-Agent": USER_AGENT}) as http:
         app, note = prepare_one(store, new_client, loaded, load_profile(settings), http, posting_id,
-                                again=again)
+                                again=again, projects=projects)
     task.say(digest.caption(app, limit=10_000))
     if note:
         task.say(f"Form: {note}")

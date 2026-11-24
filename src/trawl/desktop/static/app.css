@@ -215,3 +215,12 @@ ul.plain li { padding: 3px 0; }
 .reqs td:nth-child(3) { width: 52px; }
 .reqs .nice, .reqs .ev { color: var(--muted); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.cover .bank { background: var(--accent); }
+.cover-key { flex-wrap: wrap; }
+.cover-key .bank b, .reqs .bank .st { color: var(--accent); }
+
+/* choosing the projects for a tailored résumé */
+.picker { margin-top: 12px; }
+.picker summary { cursor: pointer; font-weight: 500; }
+.picker label { display: flex; gap: 8px; align-items: baseline; padding: 3px 0 3px 14px; }
+.picker .when { color: var(--faint); font-size: 11px; font-weight: 400; }
