@@ -96,6 +96,9 @@ TRAWL_TEST_DATABASE_URL=postgresql://trawl:trawl@localhost:5432/trawl .venv/bin/
 .venv/bin/python evals/run_evals.py                     # live model on hand-checked postings (costs money)
 ```
 
+CI runs ruff and all the offline tests, with Postgres and a browser, on every pull request; the live
+evals stay manual.
+
 ## Design
 
 See [`docs/design.md`](docs/design.md).

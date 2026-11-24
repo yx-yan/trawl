@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.14"]  # 3.12 is the oldest supported; the Mac runs 3.14
+    services:
+      db:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: trawl
+          POSTGRES_PASSWORD: trawl
+          POSTGRES_DB: trawl
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U trawl" --health-interval 5s --health-retries 10
+    env:
+      TRAWL_TEST_DATABASE_URL: postgresql://trawl:trawl@localhost:5432/trawl
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev,app]"
+      - run: playwright install --with-deps chromium
+      - run: ruff check .
+      # Tests skip where the database or a browser is missing; here both are present, so a skip is a fault
+      - name: pytest, with nothing skipped
+        shell: bash
+        run: |
+          pytest -q -rs | tee pytest.log
+          if grep -qE '[0-9]+ skipped' pytest.log; then echo "::error::tests were skipped"; exit 1; fi
