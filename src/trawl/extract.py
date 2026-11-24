@@ -51,11 +51,12 @@ class JobFacts(BaseModel):
     graduation_from: str | None = Field(description=(
         "For graduate or intern roles: the earliest graduation date accepted, as YYYY-MM "
         "(e.g. 'graduating Dec 2027 - Jun 2028' -> '2027-12'); null if not stated. For vague "
-        "dates use: early YEAR -> YEAR-01, mid or summer YEAR -> YEAR-06, late or end of YEAR -> "
-        "YEAR-09, a bare YEAR -> YEAR-01 here and YEAR-12 for graduation_to."))
+        "dates use: early YEAR -> YEAR-01, mid YEAR -> YEAR-06, summer YEAR -> YEAR-06 here and "
+        "YEAR-08 for graduation_to, late or end of YEAR -> YEAR-09, a bare YEAR -> YEAR-01 here and "
+        "YEAR-12 for graduation_to."))
     graduation_to: str | None = Field(description=(
         "The latest graduation date accepted, as YYYY-MM (e.g. '2025 or 2026 graduates' -> "
-        "'2026-12'); null if not stated."))
+        "'2026-12', 'degree obtained by summer 2027' -> '2027-08'); null if not stated."))
     requires_phd: bool = Field(description="True only if a PhD is required, not just preferred.")
     required_languages: list[str] = Field(description=(
         "Spoken languages other than English that are required, not just a plus, e.g. ['Japanese']."))
