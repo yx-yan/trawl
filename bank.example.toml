@@ -1,6 +1,9 @@
-# Spare résumé bullets: true things that don't fit on the one-page master résumé. When a job
-# values one of them more than a bullet on the page, the tailor may swap it in, worded as needed
+# Spare bullets, projects and skills: true things that don't fit on the one-page master résumé. When a job
+# values one of them more than what's on the page, the tailor may swap it in, worded as needed
 # but held to the facts written here, like every other bullet.
+#
+# On any item: `confirm = "..."` shows a warning whenever it's used; `use = false` hides it. Other
+# keys, such as `evidence`, are for you.
 #
 # It lives next to the résumé in the private résumé repo as bank.toml, written and reviewed
 # like the résumé itself; `deploy/deploy.sh profile` copies it to ~/.trawl/bank.toml.
@@ -9,3 +12,26 @@
 [[bullet]]
 entry = "Solfish"   # the first résumé entry whose title contains this text
 latex = '''Added a \textbf{long-term memory} of past sessions, searched by keyword before each task.'''
+
+# A whole project: the tailor keeps the 3 projects that fit the job best
+[[project]]
+id = "example"
+title = "Example: A Search Service"
+dates = "Jan 2026 -- Mar 2026"
+role = "Course project (team of 3)"
+stack = ["Python", "PostgreSQL"]
+note = "The index was built by a teammate."   # limits the model must keep to
+
+[[project.bullet]]
+latex = '''Built the \textbf{query API} and its tests.'''
+
+# A skill that may join any skill row while one of its projects is on the page
+[[skill]]
+name = "PostgreSQL"
+from = ["example"]
+
+# How to come across for one kind of job; it guides emphasis and adds no facts
+[[narrative]]
+direction = "backend"
+lead_with = ["example"]
+text = "Builds small, tested services."

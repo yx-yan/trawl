@@ -133,13 +133,18 @@ after the digest with what was changed and why. `trawl tailor <id>` does the sam
   AWS, Kubernetes: a word with a capital that doesn't start a sentence, an inner capital or a digit)
   not in the entry or the skills, is a made-up fact: that bullet goes back to its original wording,
   and the digest says so. The summary is held to the whole résumé and may name the job it's for.
-- **One page, cut from the bottom.** While XeLaTeX reports a second page, the last bullet of the
-  longest entry goes (the model put the least relevant last), and the digest says which.
+- **One page, cut from the bottom.** While XeLaTeX reports a second page, what the model put last
+  goes, and the digest says what.
 - **What changed is counted, not reported.** The model's own notes said it had dropped sections it
   can't touch, so the digest lists the real edits (reworded, left out, spare used, reordered),
   computed by comparing with the master, above the model's reasons.
-- **Spare bullets.** True things that don't fit on the page live in `bank.toml` next to the résumé,
-  under the same review; the model may swap them in.
+- **A bank of spare material.** True things that don't fit on the page live in `bank.toml` next to the
+  résumé, under the same review: bullets, whole projects, skills, and how to come across for one
+  kind of job. The model picks the three projects that fit; a skill row takes only its own items and
+  the bank's, each skill shows once, and a bank skill needs one of its projects on the page. A bank project is held to its
+  own words like any other. What the bank marks `confirm` is listed as a warning whenever it's used.
+- **The lead is cut last.** With four projects every entry was cut to a bullet or two, and the fourth, often
+  the one a job asked for, never survived; so there are three, and the first loses bullets last.
 - **Tied to the résumé.** A tailored résumé is kept per job and per hash of the résumé and bank; a
   new résumé means new tailored versions for jobs not yet sent. PDFs live in Postgres, so the
   container needs no writable volume. The master résumé is never written: Solfish stays its only

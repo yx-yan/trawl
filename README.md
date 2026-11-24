@@ -81,7 +81,7 @@ Which companies and searches to watch lives in [`sources.toml`](sources.toml). W
 (graduation date, experience, work pass) is personal, so it lives outside the repo in
 `~/.trawl/criteria.toml`: copy [`criteria.example.toml`](criteria.example.toml) there and fill it in.
 After editing it, `trawl process --redecide` re-applies it without new model calls. The résumé is
-read from `~/.trawl/resume.tex` (or `TRAWL_RESUME`), spare bullets for tailoring from
+read from `~/.trawl/resume.tex` (or `TRAWL_RESUME`), spare bullets, projects and skills for tailoring from
 `~/.trawl/bank.toml` (format in [`bank.example.toml`](bank.example.toml)), and tailored résumés
 compile with XeLaTeX against the résumé's class and fonts in `~/.trawl/resume-class`.
 `deploy/deploy.sh profile` copies all of these from the résumé repo to the server;
